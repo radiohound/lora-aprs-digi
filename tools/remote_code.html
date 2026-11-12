@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LoRa APRS Digi Remote</title>
+<!--
+  Makes the text of an APRS message that changes a setting on a LoRa APRS digipeater over the air.
+  Everything is worked out here, in the browser: nothing is sent anywhere, and the page works offline.
+  Save this file on your phone (or open it from your own GitHub Pages) and keep your own copy: whoever can change
+  the page you use could change it to leak your key.
+  The same codes as tools/remote_code.py and src/digi3/remote.c (checked by test/host/test_remote_html.js).
+-->
+<style>
+:root {
+  --bg: #f4f6f5; --panel: #ffffff; --ink: #16201e; --muted: #5b6a67; --line: #d4dcd9; --accent: #0d6e63; --accent-ink: #ffffff;
+  --warn: #9a4d00; --bad: #b3261e; --code-bg: #e9efed;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #111816; --panel: #19221f; --ink: #e3ebe8; --muted: #9aaaa6; --line: #2d3a37; --accent: #3fbfae; --accent-ink: #062320;
+          --warn: #f0a24a; --bad: #ff8a80; --code-bg: #0c1312; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); }
+body { font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: max(14px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 32px max(16px, env(safe-area-inset-left)); }
+main { max-width: 560px; margin: 0 auto; display: grid; gap: 14px; }
+h1 { font-size: 22px; margin: 4px 0 0; }
+.sub { color: var(--muted); margin: 0; font-size: 14px; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: grid; gap: 12px; }
+label { display: grid; gap: 4px; font-size: 14px; color: var(--muted); }
+input, select { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 9px 10px; width: 100%; }
+input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.row > * { flex: 1 1 auto; }
+.seg { display: flex; gap: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { flex: 1; border: 0; border-radius: 0; background: var(--bg); color: var(--muted); padding: 8px; font: inherit; font-size: 14px; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 999px; padding: 5px 10px; }
+button.main { font: inherit; font-weight: 600; border: 0; border-radius: 6px; padding: 12px; background: var(--accent); color: var(--accent-ink); }
+.out { font-size: 17px; background: var(--code-bg); border-radius: 6px; padding: 12px; overflow-wrap: anywhere; user-select: all; min-height: 48px; }
+.note { font-size: 13px; color: var(--muted); margin: 0; }
+.err { color: var(--bad); font-size: 14px; margin: 0; }
+.warn { color: var(--warn); font-size: 14px; margin: 0; }
+.check { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 14px; }
+.check input { width: auto; }
+details { font-size: 14px; color: var(--muted); }
+details p { margin: 6px 0; }
+</style>
+</head>
+<body>
+<main>
+  <div>
+    <h1>LoRa APRS Digi Remote</h1>
+    <p class="sub">Makes a command for a LoRa APRS digipeater. Send the result as an APRS message to the digi. Nothing leaves this page.</p>
+  </div>
+
+  <section>
+    <label>Digipeater callsign, with SSID
+      <input id="digi" class="mono" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="K6ATV-10">
+    </label>
+    <div>
+      <div class="seg" role="group" aria-label="Key">
+        <button type="button" id="kChip" aria-pressed="true">Chip ID</button>
+        <button type="button" id="kSecret" aria-pressed="false">Own secret</button>
+      </div>
+    </div>
+    <label id="keyLabel">Chip ID (24 hex digits, from the digi's start-up message)
+      <input id="key" class="mono" autocomplete="off" spellcheck="false" autocapitalize="characters" placeholder="2F0040001350524E34393620">
+    </label>
+    <label class="check"><input type="checkbox" id="remember"> Remember the callsign and key on this device</label>
+  </section>
+
+  <section>
+    <label>Command
+      <input id="cmd" class="mono" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="set moving on">
+    </label>
+    <div class="chips" id="chips">
+      <button type="button">get battery</button>
+      <button type="button">get moving</button>
+      <button type="button">set moving on</button>
+      <button type="button">set moving off</button>
+      <button type="button">get mode</button>
+      <button type="button">set mode wide</button>
+      <button type="button">set mode fillin</button>
+      <button type="button">set mode off</button>
+      <button type="button">set move_m 100</button>
+      <button type="button">set beacon_min 60</button>
+      <button type="button">save</button>
+      <button type="button">beacon</button>
+      <button type="button">reboot</button>
+    </div>
+    <button type="button" class="main" id="make">Make the message</button>
+    <p class="err" id="err" hidden></p>
+  </section>
+
+  <section id="result" hidden>
+    <div class="out mono" id="out"></div>
+    <div class="row">
+      <button type="button" class="main" id="copy">Copy</button>
+    </div>
+    <p class="note" id="info"></p>
+    <p class="warn" id="clockWarn" hidden></p>
+  </section>
+
+  <details>
+    <summary>How it works</summary>
+    <p>The message is <span class="mono">counter command code</span>. The counter is this device's clock in seconds; the digi only accepts a counter higher than the last one it took, so a recorded message cannot be sent again. The code is SipHash-2-4, keyed with the digi's chip ID or your secret, over <span class="mono">CALLSIGN|counter|command</span>: it proves the command came from someone holding the key, and the key never goes on the air.</p>
+    <p>Over the air: get, set, save, beacon, reboot. The callsign, the radio settings and the secret can only be changed on the digi's serial port. A change works at once and is kept after <span class="mono">save</span>.</p>
+  </details>
+</main>
+
+<script id="core">
+// SipHash-2-4 and the code: the same as src/digi3/remote.c and tools/remote_code.py.
+const DigiRemote = (() => {
+  const M = (1n << 64n) - 1n;
+  const rotl = (x, b) => ((x << BigInt(b)) | (x >> BigInt(64 - b))) & M;
+  const le64 = (u, o) => { let v = 0n; for (let i = 7; i >= 0; i--) v = (v << 8n) | BigInt(u[o + i]); return v; };
+  function siphash(key, msg) {
+    const k0 = le64(key, 0), k1 = le64(key, 8);
+    const v = [0x736f6d6570736575n ^ k0, 0x646f72616e646f6dn ^ k1, 0x6c7967656e657261n ^ k0, 0x7465646279746573n ^ k1];
+    const rounds = n => { for (let r = 0; r < n; r++) {
+      v[0] = (v[0] + v[1]) & M; v[1] = rotl(v[1], 13); v[1] ^= v[0]; v[0] = rotl(v[0], 32);
+      v[2] = (v[2] + v[3]) & M; v[3] = rotl(v[3], 16); v[3] ^= v[2];
+      v[0] = (v[0] + v[3]) & M; v[3] = rotl(v[3], 21); v[3] ^= v[0];
+      v[2] = (v[2] + v[1]) & M; v[1] = rotl(v[1], 17); v[1] ^= v[2]; v[2] = rotl(v[2], 32); } };
+    const full = msg.length & ~7;
+    for (let i = 0; i < full; i += 8) { const m = le64(msg, i); v[3] ^= m; rounds(2); v[0] ^= m; }
+    let b = BigInt(msg.length & 0xFF) << 56n;
+    for (let i = 0; i < (msg.length & 7); i++) b |= BigInt(msg[full + i]) << BigInt(8 * i);
+    v[3] ^= b; rounds(2); v[0] ^= b;
+    v[2] ^= 0xFFn; rounds(4);
+    return v[0] ^ v[1] ^ v[2] ^ v[3];
+  }
+  const enc = s => new TextEncoder().encode(s);
+  const u32le = (out, o, w) => { for (let i = 0; i < 4; i++) out[o + i] = (w >>> (8 * i)) & 0xFF; };
+  const u64le = (out, o, v) => { for (let i = 0; i < 8; i++) out[o + i] = Number((v >> BigInt(8 * i)) & 0xFFn); };
+  function keyFromChip(id) {
+    const h = id.replace(/[\s:]/g, "");
+    if (!/^[0-9a-fA-F]{24}$/.test(h)) throw new Error("The chip ID is 24 hex digits, as the digi prints it at start-up.");
+    const key = new Uint8Array(16);
+    for (let w = 0; w < 3; w++) u32le(key, 4 * w, parseInt(h.slice(8 * w, 8 * w + 8), 16));
+    key.set(enc("LORA"), 12);
+    return key;
+  }
+  function keyFromSecret(secret) {
+    if (!secret.length || secret.length > 32) throw new Error("The secret is 1 to 32 characters, as set on the digi.");
+    const key = new Uint8Array(16), s = enc(secret);
+    u64le(key, 0, siphash(enc("LoRa-digi-key-A!"), s));
+    u64le(key, 8, siphash(enc("LoRa-digi-key-B!"), s));
+    return key;
+  }
+  const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  function code(key, digi, counter, command) {
+    let h = siphash(key, enc(`${digi.toUpperCase()}|${counter}|${command}`)) & ((1n << 40n) - 1n), out = "";
+    for (let i = 0; i < 8; i++) { out = B32[Number(h & 31n)] + out; h >>= 5n; }
+    return out;
+  }
+  const tidy = c => c.trim().split(/\s+/).join(" ");
+  return { siphash, keyFromChip, keyFromSecret, code, tidy };
+})();
+if (typeof module !== "undefined") module.exports = DigiRemote;
+</script>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+                  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+                  del(k) { try { localStorage.removeItem(k); } catch (e) {} } };
+  let mode = "chip";
+  const OVER_AIR = ["get", "set", "save", "beacon", "reboot"];
+  const LOCAL = ["call", "ssid", "freq", "bw", "sf", "cr", "power", "sync", "preamble", "boosted", "secret", "rc_counter"];
+
+  function setMode(m) {
+    mode = m;
+    $("kChip").setAttribute("aria-pressed", m === "chip");
+    $("kSecret").setAttribute("aria-pressed", m === "secret");
+    $("keyLabel").firstChild.textContent = m === "chip" ? "Chip ID (24 hex digits, from the digi's start-up message)" : "Secret (as set on the digi with  set secret ...)";
+    $("key").placeholder = m === "chip" ? "2F0040001350524E34393620" : "your secret";
+    $("key").type = m === "chip" ? "text" : "password";
+    $("key").autocapitalize = m === "chip" ? "characters" : "off";
+  }
+  $("kChip").onclick = () => setMode("chip");
+  $("kSecret").onclick = () => setMode("secret");
+
+  // remembered values (only when the box was ticked)
+  if (store.get("digi-rc-remember") === "1") {
+    $("remember").checked = true;
+    $("digi").value = store.get("digi-rc-digi") || "";
+    setMode(store.get("digi-rc-mode") === "secret" ? "secret" : "chip");
+    $("key").value = store.get("digi-rc-key") || "";
+  }
+  $("remember").onchange = () => {
+    if ($("remember").checked) store.set("digi-rc-remember", "1");
+    else ["digi-rc-remember", "digi-rc-digi", "digi-rc-mode", "digi-rc-key"].forEach(store.del);
+  };
+
+  for (const b of $("chips").querySelectorAll("button")) b.onclick = () => { $("cmd").value = b.textContent; $("cmd").focus(); };
+
+  function fail(msg) { $("err").textContent = msg; $("err").hidden = false; $("result").hidden = true; }
+
+  function make() {
+    $("err").hidden = true;
+    const digi = $("digi").value.trim().toUpperCase();
+    if (!/^[A-Z0-9]{1,6}(-([0-9]|1[0-5]))?$/.test(digi)) return fail("Enter the digi's callsign, e.g. K6ATV-10.");
+    const command = DigiRemote.tidy($("cmd").value);
+    if (!command) return fail("Enter a command, e.g. set moving on.");
+    const words = command.split(" ");
+    if (!OVER_AIR.includes(words[0].toLowerCase())) return fail(`"${words[0]}" cannot be sent over the air: use get, set, save, beacon or reboot.`);
+    if (words[0].toLowerCase() === "set" && LOCAL.includes((words[1] || "").toLowerCase())) return fail(`${words[1]} can only be changed on the digi's serial port.`);
+    let key;
+    try { key = mode === "chip" ? DigiRemote.keyFromChip($("key").value) : DigiRemote.keyFromSecret($("key").value); } catch (e) { return fail(e.message); }
+
+    // The counter: this device's clock in seconds, and always above the last one made here for this digi (two in one second).
+    const now = Math.floor(Date.now() / 1000), lastKey = "digi-rc-last-" + digi;
+    const last = parseInt(store.get(lastKey) || "0", 10) || 0;
+    const counter = Math.max(now, last + 1);
+    store.set(lastKey, String(counter));
+
+    const text = `${counter} ${command} ${DigiRemote.code(key, digi, counter, command)}`;
+    if (text.length > 67) return fail(`Too long for one APRS message (${text.length} of 67 characters): shorten the command.`);
+    if ($("remember").checked) { store.set("digi-rc-digi", digi); store.set("digi-rc-mode", mode); store.set("digi-rc-key", $("key").value); }
+
+    $("out").textContent = text;
+    $("info").textContent = `Send it as an APRS message to ${digi}. Counter ${counter}: ${new Date(counter * 1000).toLocaleString()}. ${text.length} of 67 characters.`;
+    const year = new Date(now * 1000).getFullYear();
+    $("clockWarn").hidden = year >= 2026 && year <= 2035;
+    $("clockWarn").textContent = `This device's clock says ${year}. A wrong clock makes a counter the digi may refuse (too low), or one that blocks later commands (too high).`;
+    $("result").hidden = false;
+    $("copy").textContent = "Copy";
+  }
+  $("make").onclick = make;
+  $("cmd").addEventListener("keydown", e => { if (e.key === "Enter") make(); });
+
+  $("copy").onclick = async () => {
+    const t = $("out").textContent;
+    try { await navigator.clipboard.writeText(t); $("copy").textContent = "Copied"; }
+    catch (e) { const r = document.createRange(); r.selectNodeContents($("out")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); $("copy").textContent = "Selected: copy it now"; }
+  };
+})();
+</script>
+</body>
+</html>
