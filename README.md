@@ -253,7 +253,7 @@ leds = on
 remote = on
 secret = (not set: the chip ID) *
 rc_counter = 0 *
-rc_path = -
+rc_path = WIDE1-1
 * = serial port only, cannot be changed over the air
 ```
 
@@ -302,7 +302,7 @@ only kept after a `save`, so a mistake is undone by a restart.
   **counter** (the tool uses the time in seconds) must be higher than the last one accepted, which is kept in flash, so
   a recorded message cannot be sent again. The same message again (a retry) is answered again but not run again.
 * **Wrong codes** are ignored without an answer; after 5 in a row commands are ignored for 10 minutes.
-* A message to the digi is answered, never repeated. `rc_path` sets the path of the answers (empty: direct).
+* A message to the digi is answered, never repeated. `rc_path` sets the path of the answers (default `WIDE1-1`, so a sender out of direct range still hears the answer through a digipeater; empty: direct).
 * `set remote off` turns it off. Each answer costs about 2 s of airtime at SF12 (and the ack another 2 s).
 
 ---
@@ -349,7 +349,7 @@ Defaults are the values in `src/digi3/config_digi3.h`. **Radio** settings need `
 | `remote` | on | on/off | settings over the air |
 | `secret` * | empty | up to 32 chars | the key for settings over the air; empty = the chip ID (never shown, serial port only) |
 | `rc_counter` * | 0 | | the last counter accepted over the air (kept so a recorded message cannot be replayed) |
-| `rc_path` | empty | up to 23 chars | path of the answers to commands over the air |
+| `rc_path` | `WIDE1-1` | up to 23 chars | path of the answers to commands over the air |
 
 Fixed at build time (they depend on the board or the program): TCXO voltage, RF switch pins, current limit, queue and
 table sizes, watchdog time, serial speed. `help` on the device lists every setting with its range.

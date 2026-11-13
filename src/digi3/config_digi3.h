@@ -78,7 +78,7 @@
 // Each message carries a code made with tools/remote_code.py from the secret: by default this chip's unique ID, printed at start-up;
 // "set secret ..." on the serial port replaces it. The command stays readable, the secret never goes on the air.
 #define REMOTE_COMMANDS     1
-#define REMOTE_REPLY_PATH   ""              // path of the replies, e.g. "WIDE1-1" if the sender may be out of direct range
+#define REMOTE_REPLY_PATH   "WIDE1-1"       // path of the replies: repeated once, so a sender out of direct range still hears them ("" = direct)
 #define REMOTE_MAX_FAILS    5               // wrong codes in a row before commands are ignored for a while
 #define REMOTE_LOCKOUT_MIN  10
 
