@@ -114,10 +114,10 @@
 #define LEDS_ENABLED        1               // default of the "leds" setting
 #define LED_RX_PIN          PB4
 
-// ---- KEYS (Ebyte MBL baseboard: Key 1 / Key 2 on PA0 / PA1, active low; which label is which is not confirmed) ----
+// ---- KEYS (Ebyte MBL baseboard: Key 2 = PA0, Key 1 = PA1, active low) ----
 // Read once at power-up or reset. Held on PA0: put the compiled-in defaults back and save them (the rescue for bad
-// radio settings or a forgotten secret). Held on PA1: jump to the chip's own serial bootloader (USART2 on PA2/PA3), so
-// the firmware can be updated over the USB cable. If both are held, the bootloader wins. 0 removes the code.
+// radio settings or a forgotten secret). Held on PA1: jump to the chip's own serial bootloader (USART1 on PA9/PA10, not the USB-serial's PA2/PA3), so
+// the firmware can be updated with a USB-serial adapter on those pins, no ST-LINK. If both are held, the bootloader wins. 0 removes the code.
 #define KEYS_ENABLED        1
 #define KEY_DEFAULTS_PIN    PA0
 #define KEY_BOOTLOADER_PIN  PA1
