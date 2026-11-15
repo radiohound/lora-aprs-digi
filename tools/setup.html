@@ -76,7 +76,7 @@ details { font-size: 14px; color: var(--muted); }
       <label>SSID (0 to 99)<input id="ssid" class="mono" type="number" min="0" max="99"></label>
     </div>
     <label>Mode
-      <select id="mode"><option value="off">off (repeats nothing)</option><option value="fillin">fillin (WIDE1-1 only)</option><option value="wide">wide (WIDE1-1, WIDE2-1, WIDE2-2)</option></select>
+      <select id="mode"><option value="off">off (repeats nothing)</option><option value="fillin" selected>fillin (WIDE1-1 only)</option><option value="wide">wide (WIDE1-1, WIDE2-1, WIDE2-2)</option></select>
     </label>
     <label class="check"><input type="checkbox" id="moving"> Moving stations only (repeats trackers, skips fixed stations)</label>
     <label>Beacon comment (up to 43 characters)<input id="comment" maxlength="43"></label>
@@ -208,7 +208,7 @@ function fill() {
   const num = s => (s || "").split(" ")[0];
   $("call").value = settings.call === "-" ? "" : settings.call || "";
   $("ssid").value = num(settings.ssid);
-  $("mode").value = settings.mode || "off";
+  $("mode").value = settings.mode || "fillin";
   $("moving").checked = settings.moving === "on";
   $("comment").value = settings.comment === "-" ? "" : settings.comment || "";
   $("lat").value = num(settings.lat);
