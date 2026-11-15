@@ -76,7 +76,7 @@ details { font-size: 14px; color: var(--muted); }
       <label>SSID (0 to 99)<input id="ssid" class="mono" type="number" min="0" max="99"></label>
     </div>
     <label>Mode
-      <select id="mode"><option value="off">off (repeats nothing)</option><option value="fillin" selected>fillin (WIDE1-1 only)</option><option value="wide">wide (WIDE1-1, WIDE2-1, WIDE2-2)</option></select>
+      <select id="mode"><option value="off">off (repeats nothing)</option><option value="fillin" selected>fillin (WIDE1-1 only)</option></select>
     </label>
     <label class="check"><input type="checkbox" id="moving"> Moving stations only (repeats trackers, skips fixed stations)</label>
     <label>Beacon comment (up to 43 characters)<input id="comment" maxlength="43"></label>
@@ -208,7 +208,12 @@ function fill() {
   const num = s => (s || "").split(" ")[0];
   $("call").value = settings.call === "-" ? "" : settings.call || "";
   $("ssid").value = num(settings.ssid);
-  $("mode").value = settings.mode || "fillin";
+  const mo = $("mode");
+  [...mo.options].forEach(o => { if (o.dataset.extra) o.remove(); });
+  if (settings.mode === "wide") {                                   // not offered, but shown if the board has it, so the page does not hide what is set
+    const o = new Option("wide (set on this board; not advised for LoRa APRS)", "wide"); o.dataset.extra = "1"; mo.add(o);
+  }
+  mo.value = settings.mode || "fillin";
   $("moving").checked = settings.moving === "on";
   $("comment").value = settings.comment === "-" ? "" : settings.comment || "";
   $("lat").value = num(settings.lat);
@@ -248,7 +253,7 @@ function problem(w) {
 const DESC = {
   call: "Your callsign, 3 to 6 letters or digits, without the SSID. Until it is set (N0CALL), the digipeater repeats and beacons nothing.",
   ssid: "The number after the dash, as in K6ATV-2. It tells your stations apart. 0 means none. The AX.25 standard stops at 15, but higher ones such as -30 are widely used.",
-  mode: "Which packets it repeats. fillin repeats only packets asking for WIDE1-1 (nearby help, the usual choice for a small digi). wide also repeats WIDE2-1 and WIDE2-2 (a bigger area, more traffic). off repeats nothing, but it still beacons and answers settings messages.",
+  mode: "Which packets it repeats. fillin repeats only packets asking for WIDE1-1: nearby help, and the right choice for LoRa APRS, where wider paths (WIDE2-1, WIDE2-2) flood a slow channel. off repeats nothing, but it still beacons and answers settings messages.",
   moving: "On: repeat only stations that are moving (trackers, balloons) and skip fixed ones, so a quiet digipeater is not kept busy by every home station. Off: repeat everything. It works out movement from the positions it hears.",
   comment: "The text sent with the beacon, up to 43 characters. Do not use the characters | or ~.",
   lat: "Where the digipeater is, in decimal degrees (north is positive). Latitude and longitude both 0 means no beacon is sent at all.",
