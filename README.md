@@ -12,6 +12,8 @@ the rest are typed in and saved in the chip itself. No reflashing to change a se
 - [What it does](#what-it-does)
 - [Hardware](#hardware)
 - [Build and flash](#build-and-flash)
+  - [Update over the USB cable (no ST-LINK)](#update-over-the-usb-cable-no-st-link)
+  - [Build it yourself](#build-it-yourself)
 - [First start](#first-start)
 - [Changing settings](#changing-settings)
 - [All the settings](#all-the-settings)
