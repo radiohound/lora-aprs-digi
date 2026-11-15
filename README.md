@@ -5,7 +5,9 @@ packets (`3C FF 01` + text), with a fill-in or wide path rule, an optional **mov
 up over a serial port or, for most settings, by an APRS message over the air: callsign, SSID, mode, radio settings and
 the rest are typed in and saved in the chip itself. No reflashing to change a setting.
 
-**Download:** prebuilt firmware (`.bin` and `.hex`) is on the [Releases page](https://github.com/radiohound/lora-aprs-digi/releases/latest). Flash it with an ST-LINK, no build needed.
+**Download:** prebuilt firmware (`.bin` and `.hex`) is on the [Releases page](https://github.com/radiohound/lora-aprs-digi/releases/latest). Put it on over the USB cable from the [setup page](https://radiohound.github.io/lora-aprs-digi/tools/setup.html) (or with an ST-LINK); no build needed.
+
+**Set it up in the browser:** the [setup page](https://radiohound.github.io/lora-aprs-digi/tools/setup.html) (Chrome or Edge) connects over USB, shows every setting with a description, saves them, updates the firmware, and can command a second digipeater over the air. No terminal program needed.
 
 > **Status:** tested on a PC and on an E77 on the air (see [What has been tested](#what-has-been-tested)). MIT licence.
 
@@ -78,8 +80,10 @@ it if the main loop ever stops for 20 seconds.
 | Keys (MBL baseboard) | **用户按键1 (Key 1, the middle button) = PA1, 用户按键2 (Key 2, the bottom one) = PA0**, active low (PA1 confirmed on a board; the manual does not give the pins). Read at power-up or reset. **Hold PA0**: the compiled-in defaults come back and are saved (rescue for bad radio settings or a forgotten secret; the over-the-air counter is kept, as with `defaults`, so recorded messages still cannot be replayed). **Hold PA1**: jump to the chip's built-in serial bootloader, which listens on USART2 (PA2/PA3, the same pins as the board's USB-serial) and on USART1 (PA9/PA10). Tested on a board: the chip enters it and the bootloader answers on the USB-serial. Costs about 0.5 KB of flash; `KEYS_ENABLED 0` removes it. |
 | Power | 3.3 V. Not yet measured with this firmware: it receives all the time. |
 
-You need a **3.3 V USB-serial adapter** on PA2/PA3 (and GND) to talk to it. An ST-LINK V2 has no serial port of its
-own, so it cannot do this job; it is only for programming. Cross the lines: adapter RX to PA2, adapter TX to PA3.
+The **MBL baseboard has a USB-serial chip built in** (the micro-USB socket, on PA2/PA3), so one cable gives you the serial
+port for settings and the firmware update. On your own board, or a bare module, you need a **3.3 V USB-serial adapter** on
+PA2/PA3 (and GND). An ST-LINK V2 has no serial port of its own: it is only for programming. Cross the lines: adapter RX to
+PA2, adapter TX to PA3. The built-in bootloader that the update uses listens on the same PA2/PA3 pair.
 
 ### Fits in a solar garden light
 
@@ -322,7 +326,7 @@ Pages): whoever can change the page you use could change it to leak your key. It
 that device (off unless you tick it).
 
 Send the printed line as an APRS message to K6ATV-10 (APRSdroid, a tracker, the LoRa APRS Pi...). The digi acks it
-(if the message has a number) and answers with a message: `moving = on (not saved)`. A change works at once but is
+(if the message has a number; the setup page sends none, so you get just the answer) and answers with a message: `moving = on (not saved)`. A change works at once but is
 only kept after a `save`, so a mistake is undone by a restart.
 
 * **What can be sent:** `get`, `set`, `save`, `beacon`, `reboot`. **Not** over the air: the callsign and SSID, the radio
@@ -436,10 +440,10 @@ can read.
 ## What has been tested
 
 **On a PC** (`test/host`): 52 checks on the digipeater core (the path rule, duplicate keys, positions against aprslib, the
-moving rules, the station list), 452 on the settings (every command, every range, a `show` → `set` round trip for every
+moving rules, the station list), 461 on the settings (every command, every range, a `show` → `set` round trip for every
 setting, the flash record, and every single-bit error and truncation of a record caught), 40 on settings over the air (with
 python3, also that `tools/remote_code.py` gives the same codes), 32 on the battery states, and 7 on
-`tools/remote_code.html`:
+`tools/remote_code.html`, plus one check that the copy of the signing code in `tools/setup.html` is identical:
 
 ```
 make -C test/host test
@@ -447,6 +451,7 @@ make -C test/host test-settings
 make -C test/host test-remote      # settings over the air
 make -C test/host test-battery
 node test/host/test_remote_html.js # tools/remote_code.html against the reference vector and remote_code.py
+python3 test/host/test_core_copy.py # tools/setup.html carries the same signing code
 ```
 
 **On a real E77, 8 November 2026** (an earlier build of this firmware; the settings, serial commands,
@@ -461,7 +466,21 @@ was repeated (`new station`); its two later packets from the same place were ski
 packet another station had already repeated was left alone (`no hops left`). `get battery` was sent over the air from a
 T-Deck and the digi answered with its supply voltage.
 
-Not yet tested: the `D3_DEBUG_SWD` setting (attaching the ST-LINK while the firmware sleeps), over-the-air `set` and `save`, a station that has moved 100 m or more in moving mode, cancel on
+**Update over USB, 15 November 2026:** on a real E77 (MBL board) the key sequence works. **Key 1 (the middle button, PA1)** held
+through a Reset puts the chip in its built-in bootloader (the program counter is in system memory) and the bootloader
+answers on the board's own USB-serial (PA2/PA3). The setup page flashed the firmware that way (the page and the
+`tools/flash_serial.py` script, which also verified it by reading the flash back over SWD), and the saved settings survived.
+**Key 2 (the bottom button, PA0)** held through a Reset put the compiled-in defaults back and saved them. The first-page-last
+write order was tested against an emulated bootloader (identical image, settings page untouched), not on an interrupted
+real update.
+
+**Remote control from a module, 15 November 2026:** a second module (`K6ATV-31`, the setup page's *Command another
+digipeater over the air*) sent `set beacon_min 60` and `save` to `K6ATV-2` (the digi at a remote site, on older firmware)
+with the nearby iGate switched off. Both were answered (`beacon_min = 60 min`, `saved`) and the replies showed in the page.
+The signed codes from the page match `tools/remote_code.py`.
+
+Not yet tested: an update that is interrupted and then lands in the blank-chip bootloader on its own, whether the ack and
+reply collide at a nearby iGate now that the page sends no message number, the `D3_DEBUG_SWD` setting (attaching the ST-LINK while the firmware sleeps), a station that has moved 100 m or more in moving mode, cancel on
 hear, a true power-off, a radio setting the chip itself refuses, power consumption, battery watching on a real battery, a long run.
 
 ---
@@ -472,7 +491,7 @@ Built with RadioLib 7.x, the Arduino STM32 core, arm-none-eabi-gcc, `-Os`:
 
 | | Used | Of |
 |---|---|---|
-| Flash | **87,968 bytes** | 260,096 usable (the last 2 KB page is reserved for the settings) |
+| Flash | **89,252 bytes** | 260,096 usable (the last 2 KB page is reserved for the settings) |
 | RAM, fixed | about 8 KB | 64 KB |
 
 ---
@@ -489,7 +508,11 @@ src/digi3/remote.c          settings over the air: SipHash codes, APRS message p
 tools/remote_code.py        makes the message text for a command over the air (Python 3, no packages)
 tools/remote_code.html      the same as a web page for a phone (one file, offline)
 src/digi3/config_digi3.h    the DEFAULTS (everything else can be changed over the serial port)
-test/host/                  PC tests
+tools/setup.html            the setup page: settings, firmware update over USB, remote control of another digipeater (Web Serial)
+tools/flash_serial.py       flashes a .bin through the chip's serial bootloader (Linux/macOS, Python 3)
+firmware/                   the firmware image the setup page flashes, and its version
+index.html                  the landing page of the GitHub Pages site
+test/host/                  PC tests (and test_core_copy.py: the signing code in setup.html matches remote_code.html)
 ```
 
 To add a setting: append a line to the table in `settings.c` (never reorder: a setting's number in the flash record is
