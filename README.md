@@ -313,7 +313,14 @@ record changes (flash is good for about 10,000 erase cycles).
 ### Settings over the air
 
 A few settings can also be changed with an APRS message to the digipeater's callsign, so a digi on a hill can be
-adjusted without climbing it. Each message carries a code that only someone holding the digi's key can make:
+adjusted without climbing it. Each message carries a code that only someone holding the digi's key can make.
+
+**Easiest: a second module and the setup page.** Plug a second module into a computer, open the
+[setup page](https://radiohound.github.io/lora-aprs-digi/tools/setup.html) and use **Command another digipeater over
+the air** ([how](#commanding-another-digipeater-from-a-second-module)). The page makes the code, sends it and shows
+the answer. Nothing to copy or type.
+
+**Hardest: a phone.** Make the code yourself and send it as an APRS message from an app:
 
 ```
 python3 tools/remote_code.py K6ATV-10 --chip 2F0040001350524E34393620 "set moving on"
