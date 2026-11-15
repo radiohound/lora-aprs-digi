@@ -45,6 +45,10 @@ button:disabled { opacity: .45; cursor: default; }
 .id { background: var(--code-bg); border-radius: 6px; padding: 10px; overflow-wrap: anywhere; user-select: all; }
 pre { margin: 0; background: var(--code-bg); border-radius: 6px; padding: 10px; font-size: 12px; max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 details { font-size: 14px; color: var(--muted); }
+.grid { display: grid; gap: 10px; margin: 10px 0; }
+.desc { display: block; font-size: 13px; color: var(--muted); line-height: 1.4; }
+.grid label small { color: var(--muted); font-size: 12px; }
+.grid label b { font-weight: 600; color: var(--ink); font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; }
 [hidden] { display: none !important; }
 </style>
 </head>
@@ -91,6 +95,16 @@ details { font-size: 14px; color: var(--muted); }
     <p class="note">Radio settings (frequency, bandwidth, spreading factor) and the key are not here. Use the terminal for those.</p>
   </section>
 
+  <section id="allbox" hidden>
+    <details id="alld">
+      <summary>All other settings</summary>
+      <p class="note">Everything the digipeater has, built from what it reports. Only the boxes you change are sent. Changing a radio setting (frequency, bandwidth, spreading factor and so on) applies it to the radio before saving. A radio setting the chip refuses is not saved.</p>
+      <div id="allgrid" class="grid"></div>
+      <p class="err" id="allerr" hidden></p>
+      <div class="row"><button class="main" id="saveall">Save these to the digipeater</button></div>
+    </details>
+  </section>
+
   <section id="idbox" hidden>
     <div class="row"><button id="getid">Read the chip ID (restarts the digipeater)</button></div>
     <div class="id mono" id="chipid" hidden></div>
@@ -107,7 +121,7 @@ details { font-size: 14px; color: var(--muted); }
 <script>
 "use strict";
 const $ = id => document.getElementById(id);
-let port = null, reader = null, writer = null, buf = "", waiters = [], settings = {}, shownCall = "";
+let port = null, reader = null, writer = null, buf = "", waiters = [], settings = {}, shownCall = "", meta = {}, orig = {};
 
 const logEl = $("log");
 function logLine(s) { logEl.textContent += s + "\n"; logEl.scrollTop = logEl.scrollHeight; if (logEl.textContent.length > 20000) logEl.textContent = logEl.textContent.slice(-10000); }
@@ -161,8 +175,11 @@ async function readSettings() {
     let m = /^callsign (\S+)/.exec(l); if (m) { shownCall = m[1]; continue; }
     m = /^([a-z_0-9]+) = (.*?)( \*)?$/.exec(l); if (m) settings[m[1]] = m[2];
   }
+  const hl = await ask("help", l => l.startsWith("* = serial port only"), 3000);
+  meta = {};
+  for (const l of hl) { const m = /^([* ]) ([a-z_0-9]+)\s+(.+)$/.exec(l); if (m && m[2] in settings) meta[m[2]] = { serial: m[1] === "*", desc: m[3].trim() }; }
   if (!("call" in settings)) { status("Connected, but the digipeater did not answer. Is it the right port? (115200 baud)"); return false; }
-  fill();
+  fill(); addHints(); buildAll();
   status("Connected. " + (shownCall ? "Callsign " + shownCall + ". " : "") + "Settings read.");
   return true;
 }
@@ -208,33 +225,145 @@ function problem(w) {
   return "";
 }
 
+// What each setting does, in plain words. The ranges come from the digipeater itself (see buildAll).
+const DESC = {
+  call: "Your callsign, 3 to 6 letters or digits, without the SSID. Until it is set (N0CALL), the digipeater repeats and beacons nothing.",
+  ssid: "The number after the dash, as in K6ATV-2. It tells your stations apart. 0 means none. The AX.25 standard stops at 15, but higher ones such as -30 are widely used.",
+  mode: "Which packets it repeats. fillin repeats only packets asking for WIDE1-1 (nearby help, the usual choice for a small digi). wide also repeats WIDE2-1 and WIDE2-2 (a bigger area, more traffic). off repeats nothing, but it still beacons and answers settings messages.",
+  moving: "On: repeat only stations that are moving (trackers, balloons) and skip fixed ones, so a quiet digipeater is not kept busy by every home station. Off: repeat everything. It works out movement from the positions it hears.",
+  comment: "The text sent with the beacon, up to 43 characters. Do not use the characters | or ~.",
+  lat: "Where the digipeater is, in decimal degrees (north is positive). Latitude and longitude both 0 means no beacon is sent at all.",
+  lon: "Longitude in decimal degrees (west is negative, so -120.5 for the western US).",
+  beacon_min: "How often it sends its own beacon (position, comment and battery), in minutes. Longer saves battery and airtime.",
+  batt: "Measure the chip's supply voltage so the battery can be reported and protected. Turn off if the board is not battery powered, or the reading is wrong.",
+  delay_min: "The shortest random wait before it repeats a packet. A wait stops two digipeaters that heard the same packet from transmitting at the same moment and destroying each other.",
+  delay_max: "The longest random wait before repeating. It must be at least delay_min. Longer lowers collisions but delays every repeat.",
+  cad_difs: "Listen before talk: how many times in a row it must find the channel free before it transmits. More is more polite, and slower.",
+  cad_backoff: "When the channel is busy, it waits a random number of slots, from 1 up to this, then listens again. Larger spreads several waiting stations further apart.",
+  cad_wait: "If the channel stays busy this long (in seconds), it gives up on that repeat instead of sending it stale.",
+  cancel: "If another digipeater repeats the same packet while yours is waiting its turn, drop yours. That saves airtime when two digis cover the same area.",
+  dedupe: "A packet heard again within this many seconds is not repeated again. It stops loops, and the same packet arriving by two routes.",
+  move_m: "Moving only: how far, in metres, a station's position must change for it to count as moved.",
+  stationary_min: "Moving only: also repeat a fixed station every this many minutes, so it is still heard sometimes. 0 means never.",
+  mv_messages: "Moving only: still repeat APRS messages and their acknowledgements, even from fixed stations, so two-way messaging keeps working.",
+  mv_other: "Moving only: also repeat packets that carry no position (status, telemetry and so on).",
+  always_tocalls: "Moving only: destination prefixes that are always repeated, separated by commas, for example APLAIX,APLAB (trackers whose position the digi cannot read).",
+  log: "Print a line for every packet heard and every transmission on the serial port. Turn off for a quiet console. Replies to commands always print.",
+  stats_min: "Print the counters (heard, repeated, cancelled and so on) on the serial port every this many minutes. 0 means never.",
+  sym_table: "First half of the APRS map symbol: / is the main table, \\ the alternate table, or a letter or digit for an overlay. With the code # and table L this is the LoRa digipeater icon.",
+  sym_code: "Second half of the APRS map symbol, one character. # is the digipeater star.",
+  path: "The path on your own beacon, for example WIDE1-1 to ask neighbouring digipeaters to repeat it. Empty means direct only.",
+  tocall: "The destination field of your beacon, which APRS uses to tell what software sent it. APZ is for experimental software; leave it unless you know why not.",
+  beacon_first: "How long after power-up the first beacon goes out, in seconds. The next ones follow every beacon interval.",
+  freq: "The frequency in MHz. LoRa APRS uses 433.775 in most places. Every station on a network has to match, or they cannot hear each other.",
+  bw: "The LoRa bandwidth. 125 kHz is the LoRa APRS standard. Narrower reaches farther and is slower. It must match the other stations.",
+  sf: "Spreading factor, 5 to 12. Higher is slower but hears weaker signals; SF12 is the long-range choice and takes about 2 seconds per message. It must match the other stations.",
+  cr: "Coding rate: the amount of error correction, from 4/5 (least) to 4/8 (most). 4/5 is the LoRa APRS standard. It must match the other stations.",
+  power: "Transmit power in dBm. 22 is the chip's maximum (about 160 mW). Lower saves battery and reduces interference. What leaves the antenna also depends on the board and the battery.",
+  sync: "The LoRa sync word, a network ID. Stations with a different one ignore each other. 0x12 is the LoRa APRS standard.",
+  preamble: "Length of the start-of-packet signal, in symbols. It lets receivers lock on. It must match the other stations; 8 is the standard.",
+  boosted: "Boosted receive gain: a little more sensitivity (about 2 to 3 dB) for a little more current while listening (about 0.7 mA). Turn off to save battery.",
+  leds: "The receive LED (LED1) flashes for every packet heard. Turn off to save a little current at a battery site. The transmit LED is wired to the radio and cannot be switched off.",
+  remote: "Allow settings to be changed by an APRS message over the air, using a code only the key holder can make. Off disables that completely, leaving only the serial port.",
+  secret: "The key for over-the-air commands. Empty means the chip's own ID is the key. Set your own to use it instead, and tell the remote page. It is never shown back: type a new one, or - to clear.",
+  rc_counter: "The highest message counter accepted over the air. It only goes up, so a recorded message cannot be replayed. Change it only if you know why.",
+  rc_path: "The path on the answers sent to over-the-air commands. WIDE1-1 lets a nearby digipeater repeat the answer, so a sender out of direct range still hears it. Empty means direct only.",
+  batt_warn: "Battery voltage (mV) below which the digipeater only reports the battery as low. Nothing is switched off.",
+  batt_low: "Below this voltage (mV) it stops repeating and beaconing to save power. It still answers commands.",
+  batt_sleep: "Below this voltage (mV) it goes to deep sleep to protect the battery.",
+  batt_resume: "After sleeping or going low, it works normally again once the voltage rises above this (mV). Keep it above batt_warn so it does not flap.",
+};
+// Puts the description under each box of the main form too.
+function addHints() {
+  ["call", "ssid", "mode", "moving", "comment", "lat", "lon", "beacon_min", "batt"].forEach(id => {
+    const lab = $(id).closest("label"); if (!lab || lab.querySelector(".desc")) return;
+    const d = document.createElement("span"); d.className = "desc"; d.textContent = DESC[id]; lab.append(d);
+  });
+}
+
 // Only the settings that differ from what the digipeater has are sent.
 function currentOf(name) { const v = settings[name]; return v === undefined ? undefined : v.split(" ")[0]; }
+const RADIO = ["freq", "bw", "sf", "cr", "power", "sync", "preamble", "boosted"];   // these need "apply" before they take effect
+const MAIN = ["call", "ssid", "mode", "moving", "comment", "lat", "lon", "beacon_min", "batt"];   // the form above; not repeated in the list
+const BW = ["7.8", "10.4", "15.6", "20.8", "31.25", "41.7", "62.5", "125", "250", "500"];
+
+async function sendSets(pairs) {
+  const failed = []; let radio = false;
+  for (const [name, val] of pairs) {
+    const out = await ask("set " + name + " " + val, l => /^(ok:|error:)/.test(l), 2000);
+    const bad = out.find(l => l.startsWith("error:"));
+    if (bad) failed.push(name + ": " + bad.slice(6).trim());
+    if (RADIO.includes(name)) radio = true;
+  }
+  return { failed, radio };
+}
+
+// Sends the changes, applies the radio if needed, then saves. Nothing is saved if anything was refused.
+async function commitAll(pairs, errEl) {
+  errEl.hidden = true;
+  if (!pairs.length) { status("Nothing changed, nothing to save."); return; }
+  const { failed, radio } = await sendSets(pairs);
+  let err = failed.length ? "Not accepted: " + failed.join("; ") : "";
+  if (!err && radio) {
+    const out = await ask("apply", l => /^(ok: radio|error:)/.test(l), 5000);
+    const bad = out.find(l => l.startsWith("error:"));
+    if (bad) err = bad.slice(6).trim();
+  }
+  if (err) { errEl.hidden = false; errEl.textContent = err; status("Nothing saved. Press Read again to see what the digipeater holds now."); return; }
+  const out = await ask("save", l => /^(saved|already|error)/.test(l), 3000);
+  status(out.some(l => /^(saved|already)/.test(l)) ? "Saved to the digipeater." : "Sent, but no confirmation of the save. Press Read again.");
+  await readSettings();
+}
+
 async function save() {
   const w = wanted(), err = problem(w), fe = $("formerr");
   fe.hidden = !err; fe.textContent = err;
   if (err) return;
   $("save").disabled = true;
   try {
-    const order = ["call", "ssid", "mode", "moving", "comment", "lat", "lon", "beacon_min", "batt"];
-    const failed = [];
-    let sent = 0;
-    for (const name of order) {
-      const want = w[name];
-      const have = name === "comment" ? (settings.comment === undefined ? undefined : settings.comment) : currentOf(name);
-      if (name === "lat" || name === "lon") { if (have !== undefined && Number(have) === Number(want)) continue; }
-      else if (have === want) continue;
-      const out = await ask("set " + name + " " + want, l => /^(ok:|error:)/.test(l), 2000);
-      sent++;
-      const bad = out.find(l => l.startsWith("error:"));
-      if (bad) failed.push(name + ": " + bad.slice(6).trim());
+    const pairs = [];
+    for (const name of ["call", "ssid", "mode", "moving", "comment", "lat", "lon", "beacon_min", "batt"]) {
+      const want = w[name], have = currentOf(name);
+      if (name === "comment" ? settings.comment === want : (name === "lat" || name === "lon") ? (have !== undefined && Number(have) === Number(want)) : have === want) continue;
+      pairs.push([name, want]);
     }
-    if (failed.length) { fe.hidden = false; fe.textContent = "Not accepted: " + failed.join("; "); status("Some settings were refused, nothing saved."); return; }
-    if (!sent) { status("Nothing changed, nothing to save."); return; }
-    const out = await ask("save", l => /^(saved|error)/.test(l), 3000);
-    status(out.some(l => l.startsWith("saved")) ? "Saved to the digipeater." : "Sent, but no confirmation of the save. Press Read again.");
-    await readSettings();
+    await commitAll(pairs, fe);
   } finally { $("save").disabled = false; }
+}
+
+// The list of every other setting, made from "show" (values) and "help" (what kind of value each one takes).
+function buildAll() {
+  const g = $("allgrid"); g.textContent = ""; orig = {};
+  for (const name of Object.keys(settings)) {
+    const m = meta[name]; if (MAIN.includes(name) || !m) continue;
+    const raw = settings[name], d = m.desc;
+    let el, val;
+    if (name === "secret") { el = document.createElement("input"); val = ""; el.placeholder = "write-only; type a new one, or - to clear"; el.autocomplete = "off"; }
+    else if (d === "on or off") { el = document.createElement("select"); ["on", "off"].forEach(o => el.add(new Option(o, o))); val = raw; }
+    else if (name === "bw") { el = document.createElement("select"); val = raw.split(" ")[0]; (BW.includes(val) ? BW : BW.concat(val)).forEach(o => el.add(new Option(o + " kHz", o))); }
+    else if (d.startsWith("text")) { el = document.createElement("input"); val = raw === "-" ? "" : raw; el.placeholder = "empty"; }
+    else { el = document.createElement("input"); val = raw.split(" ")[0]; }
+    el.value = val; orig[name] = val; el.dataset.name = name; el.className = "mono";
+    const lab = document.createElement("label");
+    const b = document.createElement("b"); b.textContent = name;
+    const sm = document.createElement("small"); sm.textContent = "  " + d + (m.serial ? "  (serial only)" : "");
+    const dd = document.createElement("span"); dd.className = "desc"; dd.textContent = DESC[name] || "";
+    lab.append(b, sm, dd, el); g.append(lab);
+  }
+  $("allbox").hidden = false;
+}
+
+async function saveAll() {
+  const pairs = [];
+  document.querySelectorAll("#allgrid [data-name]").forEach(el => {
+    const name = el.dataset.name; let v = el.value.trim();
+    if (v === orig[name]) return;
+    if (name === "secret" && !v) return;                                    // empty = leave the secret alone
+    if (!v) v = "-";
+    pairs.push([name, v]);
+  });
+  $("saveall").disabled = true;
+  try { await commitAll(pairs, $("allerr")); } finally { $("saveall").disabled = false; }
 }
 
 async function getId() {
@@ -265,7 +394,7 @@ async function connect() {
 function disconnected() {
   port = null; writer = null;
   $("connect").disabled = false; $("disconnect").disabled = true;
-  $("form").hidden = true; $("idbox").hidden = true;
+  $("form").hidden = true; $("idbox").hidden = true; $("allbox").hidden = true;
   status("Not connected.");
 }
 
@@ -280,6 +409,7 @@ async function disconnect() {
 $("connect").onclick = connect;
 $("disconnect").onclick = disconnect;
 $("save").onclick = save;
+$("saveall").onclick = saveAll;
 $("reread").onclick = readSettings;
 $("getid").onclick = getId;
 $("here").onclick = () => {
