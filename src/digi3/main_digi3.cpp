@@ -762,7 +762,7 @@ void setup()
     digitalWrite(LED_RX_PIN, LOW);
     loadSettings();
 #if KEYS_ENABLED
-    if (restoreDefaults) { d3s_defaults(&cfg); OUTLN(F("[Boot] key held: the compiled-in defaults are back (saved below)")); }
+    if (restoreDefaults) { uint32_t ctr = cfg.rc_counter; d3s_defaults(&cfg); cfg.rc_counter = ctr; OUTLN(F("[Boot] key held: the compiled-in defaults are back (saved below)")); }
 #endif
     applySettings();
     OUT(F("[Boot] callsign ")); OUTLN(myCall);
