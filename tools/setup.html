@@ -115,7 +115,8 @@ details { font-size: 14px; color: var(--muted); }
   <section id="rcbox" hidden>
     <details>
       <summary>Command another digipeater over the air</summary>
-      <p class="note">If you have a second module, this one can send it a signed command by radio: read its battery, switch a mode, send a beacon. The message goes out under <b>this</b> module's callsign, so set that first, and the other digipeater answers to it. Both need the same radio settings (frequency, spreading factor, bandwidth), and the other one needs <span class="mono">remote</span> on and a path to this module (direct, or through a digipeater).</p>
+      <p class="note">If you have a second module, this one can send it a signed command by radio: read a setting, change one, send a beacon. The message goes out under <b>this</b> module's callsign, so set that first, and the other digipeater answers to it. Both need the same radio settings (frequency, spreading factor, bandwidth), and the other one needs <span class="mono">remote</span> on and a path to this module (direct, or through a digipeater).</p>
+      <label>Saved nodes<select id="rcNodes"><option value="">(a new node)</option></select></label>
       <label>Digipeater to command, with SSID<input id="rcTarget" class="mono" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="K6ATV-2"></label>
       <div class="seg" role="group" aria-label="Key">
         <button type="button" id="rcChip" aria-pressed="true">Chip ID</button>
@@ -123,14 +124,26 @@ details { font-size: 14px; color: var(--muted); }
       </div>
       <label id="rcKeyLabel"><span>Chip ID of that digipeater (24 hex digits, printed at its start-up)</span>
         <input id="rcKey" class="mono" autocomplete="off" spellcheck="false" autocapitalize="characters" placeholder="2F0040001350524E34393620"></label>
-      <label class="check"><input type="checkbox" id="rcRemember"> Remember the callsign and key on this device</label>
-      <label>Command<input id="rcCmd" class="mono" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="get battery"></label>
-      <div class="chips" id="rcChips">
-        <button type="button">get battery</button><button type="button">get mode</button><button type="button">get moving</button>
-        <button type="button">set moving on</button><button type="button">set moving off</button>
-        <button type="button">set mode fillin</button><button type="button">set mode off</button>
-        <button type="button">set beacon_min 60</button><button type="button">save</button><button type="button">beacon</button><button type="button">reboot</button>
-      </div>
+      <div class="row"><button type="button" id="rcRemember">Remember this node</button><button type="button" id="rcForget">Forget it</button></div>
+      <p class="note">Nodes are kept in this browser only, key included. Use a private computer.</p>
+
+      <label>What to do
+        <select id="rcAction">
+          <option value="get">Read a setting</option>
+          <option value="set">Change a setting</option>
+          <option value="beacon">Send a beacon now</option>
+          <option value="save">Save its settings (keeps them after a power-off)</option>
+          <option value="reboot">Restart it (unsaved changes are lost)</option>
+        </select>
+      </label>
+      <label id="rcSettingLabel">Setting<select id="rcSetting"></select><span class="desc" id="rcDesc"></span></label>
+      <label id="rcValueLabel">New value<span id="rcValueHold"></span></label>
+      <label class="check" id="rcSaveLabel"><input type="checkbox" id="rcThenSave" checked> Then save it on that digipeater (so the change survives a power-off)</label>
+      <p class="note">Will send: <span class="mono" id="rcPreview"></span></p>
+      <details>
+        <summary>Or type a command yourself</summary>
+        <label>Command (overrides the choices above when it is not empty)<input id="rcCmd" class="mono" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="set moving off"></label>
+      </details>
       <p class="err" id="rcerr" hidden></p>
       <div class="row"><button class="main" id="rcSend">Send the command</button></div>
       <p class="status" id="rcstatus"></p>
@@ -284,7 +297,7 @@ async function readSettings() {
   meta = {};
   for (const l of hl) { const m = /^([* ]) ([a-z_0-9]+)\s+(.+)$/.exec(l); if (m && m[2] in settings) meta[m[2]] = { serial: m[1] === "*", desc: m[3].trim() }; }
   if (!("call" in settings)) { status("Connected, but the digipeater did not answer. Is it the right port? (115200 baud)"); return false; }
-  fill(); addHints(); buildAll();
+  fill(); addHints(); buildAll(); rcBuildList();
   status("Connected. " + (shownCall ? "Callsign " + shownCall + ". " : "") + "Settings read.");
   return true;
 }
@@ -637,7 +650,7 @@ async function doFlash() {
 // ---- Command another digipeater over the air: sign a command with its key, and have this module transmit it ----
 const RC_OVER_AIR = ["get", "set", "save", "beacon", "reboot"];
 const RC_LOCAL = ["call", "ssid", "freq", "bw", "sf", "cr", "power", "sync", "preamble", "boosted", "secret", "rc_counter"];
-let rcMode = "chip", rcWatching = null;
+let rcMode = "chip", rcWatching = null, rcCtlName = "";
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
                 set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
                 del(k) { try { localStorage.removeItem(k); } catch (e) {} } };
@@ -651,48 +664,111 @@ function rcSetMode(m) {
 function rcFail(msg) { $("rcerr").textContent = msg; $("rcerr").hidden = false; }
 function ownCall() { const c = (settings.call || "").trim(), ss = Number((settings.ssid || "0").split(" ")[0]); return ss ? c + "-" + ss : c; }
 
+// the saved nodes
+function rcNodes() { try { return JSON.parse(store.get("digi-nodes") || "{}"); } catch (e) { return {}; } }
+function rcListNodes(selected) {
+  const sel = $("rcNodes"), n = rcNodes(); sel.textContent = ""; sel.add(new Option("(a new node)", ""));
+  Object.keys(n).sort().forEach(c => sel.add(new Option(c, c))); sel.value = selected && n[selected] ? selected : "";
+}
+function rcPickNode() {
+  const n = rcNodes()[$("rcNodes").value]; if (!n) return;
+  $("rcTarget").value = $("rcNodes").value; rcSetMode(n.mode === "secret" ? "secret" : "chip"); $("rcKey").value = n.key;
+}
+function rcRememberNode() {
+  const c = $("rcTarget").value.trim().toUpperCase(); if (!c || !$("rcKey").value) return rcFail("Enter the callsign and the key first.");
+  $("rcerr").hidden = true; const n = rcNodes(); n[c] = { mode: rcMode, key: $("rcKey").value }; store.set("digi-nodes", JSON.stringify(n)); rcListNodes(c);
+}
+function rcForgetNode() {
+  const c = $("rcNodes").value || $("rcTarget").value.trim().toUpperCase(); const n = rcNodes(); delete n[c]; store.set("digi-nodes", JSON.stringify(n)); rcListNodes("");
+}
+
+// the command builder, made from what this module's help says can be changed over the air
+function rcBuildList() {
+  const sel = $("rcSetting"); sel.textContent = ""; sel.add(new Option("battery (supply voltage)", "battery"));
+  for (const name of Object.keys(settings)) { const m = meta[name]; if (m && !m.serial) sel.add(new Option(name, name)); }
+  rcCtlName = ""; rcUpdate();
+}
+function rcControl(name) {
+  const d = (meta[name] || { desc: "" }).desc; let el;
+  if (d === "on or off") { el = document.createElement("select"); ["on", "off"].forEach(o => el.add(new Option(o, o))); }
+  else if (d.startsWith("off, fillin")) { el = document.createElement("select"); ["fillin", "off"].forEach(o => el.add(new Option(o, o))); }
+  else { el = document.createElement("input"); el.placeholder = d.startsWith("text") ? "empty (type - to clear)" : d; }
+  el.id = "rcValue"; el.className = "mono"; el.oninput = el.onchange = rcUpdate; return el;
+}
+function rcBuiltCommand() {
+  const a = $("rcAction").value, name = $("rcSetting").value;
+  if (a === "get") return "get " + name;
+  if (a === "set") { const v = $("rcValue") ? $("rcValue").value.trim() : ""; return "set " + name + " " + (v || "-"); }
+  return a;
+}
+function rcUpdate() {
+  const a = $("rcAction").value; let name = $("rcSetting").value;
+  const pick = a === "get" || a === "set";
+  $("rcSettingLabel").hidden = !pick; $("rcValueLabel").hidden = a !== "set"; $("rcSaveLabel").hidden = a !== "set";
+  [...$("rcSetting").options].forEach(o => { o.disabled = a === "set" && o.value === "battery"; });
+  if (a === "set" && name === "battery") { $("rcSetting").selectedIndex = 1; name = $("rcSetting").value; }
+  $("rcDesc").textContent = pick ? ((DESC[name] || (name === "battery" ? "The supply voltage and state of that digipeater." : "")) + ((meta[name] || {}).desc ? "  Range: " + meta[name].desc + "." : "")) : "";
+  if (a === "set" && rcCtlName !== name) { $("rcValueHold").textContent = ""; $("rcValueHold").append(rcControl(name)); rcCtlName = name; }
+  $("rcPreview").textContent = ($("rcCmd").value.trim() ? DigiRemote.tidy($("rcCmd").value) : rcBuiltCommand());
+}
+
+// Sends one command; resolves true when a reply (not just an ack) came back, false after a minute of silence.
+async function rcSendOne(digi, command, key, own) {
+  const words = command.split(" ");
+  if (!RC_OVER_AIR.includes(words[0].toLowerCase())) { rcFail('"' + words[0] + '" cannot be sent over the air: use get, set, save, beacon or reboot.'); return null; }
+  if (words[0].toLowerCase() === "set" && RC_LOCAL.includes((words[1] || "").toLowerCase())) { rcFail(words[1] + " can only be changed on the digipeater's serial port."); return null; }
+  const now = Math.floor(Date.now() / 1000), lastKey = "digi-rc-last-" + digi;                 // always above the last counter used for this digipeater
+  const counter = Math.max(now, (parseInt(store.get(lastKey) || "0", 10) || 0) + 1);
+  const text = counter + " " + command + " " + DigiRemote.code(key, digi, counter, command);
+  if (text.length > 67) { rcFail("Too long for one APRS message (" + text.length + " of 67 characters): shorten the command."); return null; }
+  store.set(lastKey, String(counter));
+  const out = await ask("send " + digi + " " + text, l => /^(ok:|error:)/.test(l), 3000);
+  const bad = out.find(l => l.startsWith("error:"));
+  if (!out.length) { rcFail("No answer from this module."); return null; }
+  if (bad) { rcFail(/unknown command/.test(bad) ? "This module's firmware has no send command. Update its firmware (v1.2.2 or newer)." : bad.slice(6).trim()); return null; }
+  $("rcout").hidden = false; $("rcout").textContent += "sent to " + digi + ": " + text + "\n";
+  $("rcstatus").textContent = "Sent: " + command + ". Waiting up to a minute for the reply (a slow radio link takes a few seconds each way)...";
+  const pad = own.padEnd(9, " ");
+  return new Promise(resolve => {
+    if (rcWatching) waiters = waiters.filter(x => x !== rcWatching);
+    let done = false;
+    const finish = r => { if (done) return; done = true; waiters = waiters.filter(x => x !== w); clearTimeout(t); resolve(r); };
+    const w = line => {
+      const i = line.indexOf("::" + pad + ":"); if (i < 0) return;
+      const from = /([A-Z0-9]+(?:-[0-9]+)?)>[^:]*::/.exec(line); const body = line.slice(i + 12).replace(/\{[^}]*\}.*$/, "");
+      if (/^ack/i.test(body)) $("rcout").textContent += "ack from " + (from ? from[1] : "?") + "\n";
+      else { $("rcout").textContent += "reply from " + (from ? from[1] : "?") + ": " + body + "\n"; finish(true); }
+    };
+    const t = setTimeout(() => finish(false), 60000);
+    rcWatching = w; waiters.push(w);
+  });
+}
+
 async function rcSend() {
-  $("rcerr").hidden = true;
+  $("rcerr").hidden = true; $("rcout").textContent = "";
   const own = ownCall();
   if (!own || own === "N0CALL" || own === "N0CALL-10") return rcFail("Set this module's own callsign first (the form above), and save it. The other digipeater answers to that callsign.");
   const digi = $("rcTarget").value.trim().toUpperCase();
   if (!/^[A-Z0-9]{1,6}(-[0-9]{1,2})?$/.test(digi)) return rcFail("Enter the digipeater's callsign, for example K6ATV-2.");
   if (digi === own) return rcFail("That is this module's own callsign.");
-  const command = DigiRemote.tidy($("rcCmd").value);
-  if (!command) return rcFail("Enter a command, for example get battery.");
-  const words = command.split(" ");
-  if (!RC_OVER_AIR.includes(words[0].toLowerCase())) return rcFail('"' + words[0] + '" cannot be sent over the air: use get, set, save, beacon or reboot.');
-  if (words[0].toLowerCase() === "set" && RC_LOCAL.includes((words[1] || "").toLowerCase())) return rcFail(words[1] + " can only be changed on the digipeater's serial port.");
+  const command = $("rcCmd").value.trim() ? DigiRemote.tidy($("rcCmd").value) : rcBuiltCommand();
   let key;
   try { key = rcMode === "chip" ? DigiRemote.keyFromChip($("rcKey").value) : DigiRemote.keyFromSecret($("rcKey").value); } catch (e) { return rcFail(e.message); }
-  const now = Math.floor(Date.now() / 1000), lastKey = "digi-rc-last-" + digi;                 // always above the last counter used for this digipeater
-  const counter = Math.max(now, (parseInt(store.get(lastKey) || "0", 10) || 0) + 1);
-  const text = counter + " " + command + " " + DigiRemote.code(key, digi, counter, command);
-  if (text.length > 67) return rcFail("Too long for one APRS message (" + text.length + " of 67 characters): shorten the command.");
-  const yr = new Date(now * 1000).getFullYear();
+  const yr = new Date().getFullYear();
   if (yr < 2026 || yr > 2035) return rcFail("This computer's clock says " + yr + ". The counter comes from the clock, so a wrong clock would be refused or lock later commands out.");
-  if ($("rcRemember").checked) { store.set("digi-rc-digi", digi); store.set("digi-rc-mode", rcMode); store.set("digi-rc-key", $("rcKey").value); }
-  store.set(lastKey, String(counter));
-
   $("rcSend").disabled = true;
   try {
     if (!$("livelog").checked) { $("livelog").checked = true; await send("set log on"); }
-    const out = await ask("send " + digi + " " + text, l => /^(ok:|error:)/.test(l), 3000);
-    const bad = out.find(l => l.startsWith("error:"));
-    if (!out.length) return rcFail("No answer from this module.");
-    if (bad) return rcFail(/unknown command/.test(bad) ? "This module's firmware has no send command. Update its firmware (v1.2.2 or newer)." : bad.slice(6).trim());
-    $("rcout").hidden = false; $("rcout").textContent = "sent to " + digi + ": " + text + "\n";
-    $("rcstatus").textContent = "Sent. Waiting up to a minute for the reply (a slow radio link takes a few seconds each way)...";
-    if (rcWatching) waiters = waiters.filter(x => x !== rcWatching);
-    const pad = own.padEnd(9, " ");
-    const w = line => {
-      const i = line.indexOf("::" + pad + ":"); if (i < 0) return;
-      const from = /([A-Z0-9]+(?:-[0-9]+)?)>[^:]*::/.exec(line); const body = line.slice(i + 12).replace(/\{[^}]*\}.*$/, "");
-      if (/^ack/i.test(body)) $("rcout").textContent += "ack from " + (from ? from[1] : "?") + "\n";
-      else { $("rcout").textContent += "reply from " + (from ? from[1] : "?") + ": " + body + "\n"; $("rcstatus").textContent = "Reply received."; }
-    };
-    rcWatching = w; waiters.push(w);
-    setTimeout(() => { waiters = waiters.filter(x => x !== w); if ($("rcstatus").textContent.startsWith("Sent")) $("rcstatus").textContent = "No reply heard. It may be out of range, have remote off, or the key or counter was wrong."; }, 60000);
+    const got = await rcSendOne(digi, command, key, own);
+    if (got === null) return;
+    const wasSet = command.split(" ")[0].toLowerCase() === "set";
+    if (got && wasSet && !$("rcSaveLabel").hidden && $("rcThenSave").checked && !$("rcCmd").value.trim()) {
+      const g2 = await rcSendOne(digi, "save", key, own);
+      $("rcstatus").textContent = g2 ? "Changed and saved." : g2 === false ? "Changed, but no reply to the save: it may not be saved. Send Save again." : $("rcstatus").textContent;
+    } else {
+      $("rcstatus").textContent = got ? "Reply received." : "No reply heard. It may be out of range, have remote off, or the key or counter was wrong.";
+      if (!got && wasSet && $("rcThenSave").checked) $("rcstatus").textContent += " It was not saved.";
+    }
   } finally { $("rcSend").disabled = false; }
 }
 
@@ -703,13 +779,9 @@ $("saveall").onclick = saveAll;
 $("flashbtn").onclick = doFlash;
 $("rcChip").onclick = () => rcSetMode("chip"); $("rcSecret").onclick = () => rcSetMode("secret");
 $("rcSend").onclick = rcSend;
-$("rcCmd").addEventListener("keydown", e => { if (e.key === "Enter") rcSend(); });
-for (const b of $("rcChips").querySelectorAll("button")) b.onclick = () => { $("rcCmd").value = b.textContent; $("rcCmd").focus(); };
-if (store.get("digi-rc-remember") === "1") {
-  $("rcRemember").checked = true; $("rcTarget").value = store.get("digi-rc-digi") || "";
-  rcSetMode(store.get("digi-rc-mode") === "secret" ? "secret" : "chip"); $("rcKey").value = store.get("digi-rc-key") || "";
-}
-$("rcRemember").onchange = () => { if ($("rcRemember").checked) store.set("digi-rc-remember", "1"); else ["digi-rc-remember", "digi-rc-digi", "digi-rc-mode", "digi-rc-key"].forEach(store.del); };
+$("rcAction").onchange = $("rcSetting").onchange = rcUpdate; $("rcCmd").oninput = rcUpdate;
+$("rcNodes").onchange = rcPickNode; $("rcRemember").onclick = rcRememberNode; $("rcForget").onclick = rcForgetNode;
+rcListNodes("");
 $("livelog").onchange = async () => {
   if (!port) { $("livelog").checked = false; status("Connect first."); return; }
   try { await send($("livelog").checked ? "set log on" : "set log off"); } catch (e) {}

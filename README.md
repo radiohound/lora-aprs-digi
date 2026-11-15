@@ -396,8 +396,9 @@ table sizes, watchdog time, serial speed. `help` on the device lists every setti
 
 With two modules, one can command the other by radio, from the [setup page](https://radiohound.github.io/lora-aprs-digi/tools/setup.html):
 connect the module you hold, set its own callsign, open **Command another digipeater over the air**, enter the other
-digipeater's callsign and its key (the chip ID, or the secret you set with `set secret`), pick or type a command
-(`get battery`, `set moving off`, `beacon`...) and press **Send**. The page signs the command exactly as `tools/remote_code.html`
+digipeater's callsign and its key (the chip ID, or the secret you set with `set secret`; **Remember this node** keeps it in the
+browser for next time), choose what to do (read a setting, change one, beacon, save, restart), pick the setting from the
+list and press **Send**. A change can be saved on the other digipeater in the same go. A typed command is also accepted. The page signs the command exactly as `tools/remote_code.html`
 does, and the connected module transmits it with the serial command `send CALL text` (an APRS message under its own
 callsign, using its `rc_path`). The reply comes back as a message to the module, and the page picks it out of the packet
 log and shows it. Both modules need the same radio settings and a path to each other (direct, or through a digipeater).
