@@ -118,6 +118,8 @@ python3 tools/flash_serial.py /dev/ttyUSB0 lora-aprs-digi-e77.bin
 
 It does the same erase, write, check and start. Close any program holding the serial port first (the setup page counts).
 
+The first 2 KB page of the program is written **last**, after everything else has been written and checked. If an update is interrupted (a pulled cable, a crash of the computer), the start of flash is still blank, and a blank chip starts its own bootloader by itself: run the update again, with no key and no ST-LINK. (That blank-chip start is how the chip is documented to behave; it is not tested on a board here.)
+
 If the bootloader does not answer, the board did not enter it: hold Key 1 a little longer after releasing Reset. If
 the firmware will not start at all (a bad build that crashes before it reads the key), the ST-LINK is the way back.
 A firmware you build yourself must keep the key code (`KEYS_ENABLED 1`), or it cannot be updated this way.

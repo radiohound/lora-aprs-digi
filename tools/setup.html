@@ -463,23 +463,34 @@ async function runFlash(p, data, progress) {
     const body = be(pages - 1, 2); for (let i = 0; i < pages; i++) body.push(...be(i, 2));
     await tx([...body, xr(body)]); await ack(30000, "the erase");
     flog("erased " + pages + " pages");
-    for (let off = 0; off < data.length; off += 256) {
+    // The first page goes in LAST: until then the start of flash is blank, and a blank chip starts its own bootloader,
+    // so an update that is interrupted halfway can just be run again, with no ST-LINK.
+    const first = Math.min(PAGE, data.length), offs = [], head = [];
+    for (let o = first; o < data.length; o += 256) offs.push(o);
+    for (let o = 0; o < first; o += 256) head.push(o);
+    const total = offs.length + head.length; let done = 0;
+    const writeBlock = async off => {
       const chunk = [...data.subarray(off, off + 256)];
       await cmd(0x31);
       const ad = be(FLASH + off, 4); await tx([...ad, xr(ad)]); await ack(2000, "an address");
       const pl = [chunk.length - 1, ...chunk]; await tx([...pl, xr(pl)]); await ack(5000, "the write at 0x" + (FLASH + off).toString(16));
-      progress(0.5 * off / data.length);
-    }
-    flog("written, checking...");
-    for (let off = 0; off < data.length; off += 256) {
+      progress(0.5 * ++done / total);
+    };
+    const checkBlock = async off => {
       const len = Math.min(256, data.length - off);
       await cmd(0x11);
       const ad = be(FLASH + off, 4); await tx([...ad, xr(ad)]); await ack(2000, "a read address");
       await tx([len - 1, (len - 1) ^ 0xff]); await ack(2000, "a read length");
       const got = await rx(len, 3000);
       for (let i = 0; i < len; i++) if (got[i] !== data[off + i]) throw new Error("the check failed at 0x" + (FLASH + off + i).toString(16));
-      progress(0.5 + 0.5 * off / data.length);
-    }
+      progress(0.5 + 0.5 * ++done / (2 * total));
+    };
+    for (const o of offs) await writeBlock(o);
+    flog("written, checking...");
+    done = 0;
+    for (const o of offs) await checkBlock(o);
+    for (const o of head) await writeBlock(o);                  // only now does the start of flash stop being blank
+    for (const o of head) await checkBlock(o);
     flog("verified OK");
     await cmd(0x21); const ad = be(FLASH, 4); await tx([...ad, xr(ad)]); await ack(2000, "the start");
     flog("started the program");

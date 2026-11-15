@@ -83,25 +83,40 @@ def main():
     os.write(fd, body + bytes([xor(body)]))
     ack(fd, 30.0, "erase")
     print("erased %d pages (%d KB)" % (pages, pages * PAGE // 1024))
-    for off in range(0, len(data), 256):
+    # The first page goes in LAST. Until then the start of flash is blank, and a blank chip starts its own
+    # bootloader: an update that is interrupted halfway can simply be run again, with no ST-LINK.
+    first = min(PAGE, len(data))
+    order = list(range(first, len(data), 256)) + list(range(0, first, 256))
+
+    def write_block(off):
         chunk = data[off:off + 256]
         cmd(fd, 0x31)
         os.write(fd, addr_bytes(FLASH + off)); ack(fd, 2.0, "address")
         pl = bytes([len(chunk) - 1]) + chunk
         os.write(fd, pl + bytes([xor(pl)])); ack(fd, 5.0, "write at 0x%08X" % (FLASH + off))
-        if off % 8192 == 0:
-            print("\rwriting %3d%%" % (100 * off // len(data)), end="", flush=True)
-    print("\rwritten      ")
-    bad = 0
-    for off in range(0, len(data), 256):
+
+    def check_block(off):
         chunk = data[off:off + 256]
         cmd(fd, 0x11)
         os.write(fd, addr_bytes(FLASH + off)); ack(fd, 2.0, "read address")
         os.write(fd, bytes([len(chunk) - 1, (len(chunk) - 1) ^ 0xFF])); ack(fd, 2.0, "read length")
-        if rx(fd, len(chunk)) != chunk:
-            bad += 1
+        return rx(fd, len(chunk)) == chunk
+
+    rest = order[:len(order) - len(range(0, first, 256))]
+    head = order[len(rest):]
+    for n, off in enumerate(rest):
+        write_block(off)
+        if n % 32 == 0:
+            print("\rwriting %3d%%" % (100 * n // max(1, len(order))), end="", flush=True)
+    bad = sum(0 if check_block(off) else 1 for off in rest)
     if bad:
-        raise SystemExit("verify FAILED in %d blocks" % bad)
+        raise SystemExit("\nverify FAILED in %d blocks: the first page was NOT written, so the chip stays blank" % bad)
+    for off in head:
+        write_block(off)
+    bad = sum(0 if check_block(off) else 1 for off in head)
+    print("\rwritten      ")
+    if bad:
+        raise SystemExit("verify FAILED in the first page")
     print("verified OK")
     cmd(fd, 0x21)                                         # Go: start the program
     os.write(fd, addr_bytes(FLASH)); ack(fd, 2.0, "go")
