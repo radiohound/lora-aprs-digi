@@ -76,6 +76,16 @@ it if the main loop ever stops for 20 seconds.
 You need a **3.3 V USB-serial adapter** on PA2/PA3 (and GND) to talk to it. An ST-LINK V2 has no serial port of its
 own, so it cannot do this job; it is only for programming. Cross the lines: adapter RX to PA2, adapter TX to PA3.
 
+### Fits in a solar garden light
+
+The E77 module on its MBL baseboard fits inside an ordinary solar garden light, which makes a cheap, self-contained,
+solar-powered digipeater. The light's own panel, charge board and 18650 cell power the module, and a short pigtail
+runs to an SMA bulkhead on the case for an external antenna.
+
+| Inside | Closed up |
+|---|---|
+| ![E77 module, 18650 cell and solar charge board inside an opened solar garden light](images/garden-light-inside.jpg) | ![Closed solar garden light with its solar panel and an SMA antenna, sitting on grass](images/garden-light-outside.jpg) |
+
 ---
 
 ## Build and flash
