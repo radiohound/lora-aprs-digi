@@ -95,6 +95,33 @@ runs to an SMA bulkhead on the case for an external antenna.
 
 **Prebuilt:** download `lora-aprs-digi-e77.bin` (flash at `0x08000000`) or the `.hex` from the [latest release](https://github.com/radiohound/lora-aprs-digi/releases/latest), check it against `SHA256SUMS.txt`, and program it with an ST-LINK (for example STM32CubeProgrammer). To build it yourself:
 
+### Update over the USB cable (no ST-LINK)
+
+Once the board runs this firmware (v1.1.0 or newer), new versions go on over the same USB cable that you use for the
+settings. The first firmware on a board that does not have it yet needs an ST-LINK, once (see below). A blank chip
+starts its own bootloader by itself.
+
+**From the browser** (Chrome or Edge, on a computer):
+
+1. Open the [setup page](https://radiohound.github.io/lora-aprs-digi/tools/setup.html) and open **Update the firmware (USB cable)**. It shows the firmware that comes with the page (or choose your own `.bin`).
+2. On the board, hold **Key 1** (the middle button, 用户按键1, on PA1) and tap **Reset** (the top button). Keep holding Key 1 for about a second, then let go. The chip is now in its built-in bootloader.
+3. Press **Flash firmware** and pick the board's USB port. The page erases the pages the program needs, writes it, reads it back to check it, and starts it (about half a minute).
+4. Press **Connect** on the same page to set it up. Your saved settings are kept: only the program area is rewritten, and the last 2 KB page (the settings) is never touched.
+
+**From the command line** (Linux or macOS, Python 3, nothing to install), after steps 1 and 2 of the same key sequence:
+
+```
+python3 tools/flash_serial.py /dev/ttyUSB0 lora-aprs-digi-e77.bin
+```
+
+It does the same erase, write, check and start. Close any program holding the serial port first (the setup page counts).
+
+If the bootloader does not answer, the board did not enter it: hold Key 1 a little longer after releasing Reset. If
+the firmware will not start at all (a bad build that crashes before it reads the key), the ST-LINK is the way back.
+A firmware you build yourself must keep the key code (`KEYS_ENABLED 1`), or it cannot be updated this way.
+
+### Build it yourself
+
 Needs [PlatformIO](https://platformio.org/) (VS Code extension, or `pio` on the command line).
 
 ```
