@@ -720,9 +720,34 @@ static void serialPoll()
     }
 }
 
+#if KEYS_ENABLED
+// The chip's own bootloader lives in system memory. Called first thing in setup(), before the watchdog and the serial
+// port are started, so the bootloader finds the chip as after a reset.
+static void jumpToBootloader()
+{
+    const uint32_t BOOT = 0x1FFF0000UL;
+    __disable_irq();
+    HAL_RCC_DeInit(); HAL_DeInit();
+    SysTick->CTRL = 0; SysTick->LOAD = 0; SysTick->VAL = 0;
+    for (int i = 0; i < 2; i++) { NVIC->ICER[i] = 0xFFFFFFFFUL; NVIC->ICPR[i] = 0xFFFFFFFFUL; }
+    __HAL_SYSCFG_REMAPMEMORY_SYSTEMFLASH();
+    SCB->VTOR = 0;
+    __set_MSP(*(volatile uint32_t *)BOOT);
+    ((void (*)(void))(*(volatile uint32_t *)(BOOT + 4)))();
+    for (;;) {}
+}
+static bool keyHeld(uint32_t pin) { return digitalRead(pin) == LOW; }
+#endif
+
 // ============================================================
 void setup()
 {
+#if KEYS_ENABLED
+    pinMode(KEY_DEFAULTS_PIN, INPUT_PULLUP); pinMode(KEY_BOOTLOADER_PIN, INPUT_PULLUP);
+    delay(10);                                  // the keys have a debounce capacitor
+    if (keyHeld(KEY_BOOTLOADER_PIN)) jumpToBootloader();
+    const bool restoreDefaults = keyHeld(KEY_DEFAULTS_PIN);
+#endif
 #if D3_DEBUG_SWD
     HAL_DBGMCU_EnableDBGSleepMode();            // first, before anything can sleep: keeps SWD answering in WFI
     HAL_DBGMCU_EnableDBGStopMode();             // batterySleep() uses STOP2, which wakes only every 8 s
@@ -736,6 +761,9 @@ void setup()
     pinMode(LED_RX_PIN, OUTPUT);                // out of its power-on debug mode, which has a pull-up that glows the LED faintly
     digitalWrite(LED_RX_PIN, LOW);
     loadSettings();
+#if KEYS_ENABLED
+    if (restoreDefaults) { d3s_defaults(&cfg); OUTLN(F("[Boot] key held: the compiled-in defaults are back (saved below)")); }
+#endif
     applySettings();
     OUT(F("[Boot] callsign ")); OUTLN(myCall);
     {
@@ -763,6 +791,9 @@ void setup()
     }
     randomSeed(radio.random(0x7FFFFFFF));
     startRx();
+#if KEYS_ENABLED
+    if (restoreDefaults) saveSettings();
+#endif
     d3b_init(&battery);
     if (cfg.batt) {                                      // three quick readings, so an empty battery is noticed at power-up too
         for (int i = 0; i < BATT_CONFIRM; i++) { unsigned mv = readVddMv(); if (mv) batteryApply(mv); delay(20); }
