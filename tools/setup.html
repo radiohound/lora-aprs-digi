@@ -133,6 +133,8 @@ details { font-size: 14px; color: var(--muted); }
   <section>
     <details>
       <summary>Serial log</summary>
+      <label class="check"><input type="checkbox" id="livelog"> Show received packets (turns the digipeater's packet log on while you watch)</label>
+      <div class="row"><button id="clearlog">Clear</button></div>
       <pre id="log" class="mono"></pre>
     </details>
   </section>
@@ -186,8 +188,7 @@ function ask(cmd, stop, ms) {
 
 async function readSettings() {
   status("Reading the settings...");
-  await send("set log off");                                       // packet log lines would mix into the answers
-  await sleep(200);
+  if (!$("livelog").checked) { await send("set log off"); await sleep(200); }   // packet lines would mix into the answers; skipped while you watch them
   const lines = await ask("show", l => l.startsWith("* = serial port only"), 3000);
   settings = {}; shownCall = "";
   for (const l of lines) {
@@ -420,6 +421,7 @@ function disconnected() {
   port = null; writer = null;
   $("connect").disabled = false; $("disconnect").disabled = true;
   $("form").hidden = true; $("idbox").hidden = true; $("allbox").hidden = true;
+  $("livelog").checked = false;
   status("Not connected.");
 }
 
@@ -552,6 +554,12 @@ $("disconnect").onclick = disconnect;
 $("save").onclick = save;
 $("saveall").onclick = saveAll;
 $("flashbtn").onclick = doFlash;
+$("livelog").onchange = async () => {
+  if (!port) { $("livelog").checked = false; status("Connect first."); return; }
+  try { await send($("livelog").checked ? "set log on" : "set log off"); } catch (e) {}
+  $("log").closest("details").open = true;
+};
+$("clearlog").onclick = () => { $("log").textContent = ""; };
 $("fwfile").onchange = async ev => { const f = ev.target.files[0]; if (f) await showFw(f.name, new Uint8Array(await f.arrayBuffer())); };
 loadBundled();
 $("reread").onclick = readSettings;
