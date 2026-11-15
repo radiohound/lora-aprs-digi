@@ -118,6 +118,9 @@
 // Read once at power-up or reset. Held on PA0: put the compiled-in defaults back and save them (the rescue for bad
 // radio settings or a forgotten secret). Held on PA1: jump to the chip's own serial bootloader (USART2 on PA2/PA3, or USART1 on PA9/PA10), so
 // the firmware can be updated over the USB-serial on PA2/PA3, no ST-LINK. If both are held, the bootloader wins. 0 removes the code.
+// ---- SEND (serial command "send CALL text": the module sends one APRS message, so the setup page can command another digipeater) ----
+#define SERIAL_SEND         1               // 0 removes the command (saves the flash it uses)
+
 #define KEYS_ENABLED        1
 #define KEY_DEFAULTS_PIN    PA0
 #define KEY_BOOTLOADER_PIN  PA1

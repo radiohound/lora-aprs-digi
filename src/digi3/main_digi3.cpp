@@ -600,6 +600,17 @@ static void applyRadio()
 static void handleCommand(const char *line)
 {
     if (strncasecmp(line, "battery", 7) == 0 && (line[7] == 0 || line[7] == ' ')) { handleBattery(line + 7); return; }
+#if SERIAL_SEND
+    if (strncasecmp(line, "send ", 5) == 0) {             // send CALL text: an APRS message from this digi (the setup page's remote control)
+        char to[10]; const char *p = line + 5; size_t n = 0;
+        while (*p && *p != ' ' && n < sizeof to - 1) to[n++] = (char)toupper((unsigned char)*p++);
+        to[n] = 0; while (*p == ' ') p++;
+        if (!callsignSet) OUTLN(F("error: set a callsign first"));
+        else if (!n || !*p) OUTLN(F("error: send CALL text"));
+        else OUTLN(queueMessage(to, p, 0) ? F("ok: message queued") : F("error: no room, try again"));
+        return;
+    }
+#endif
     char before[16]; strcpy(before, myCall);
     unsigned fl = d3s_exec(&cfg, line, emitLine, nullptr);
     if (fl & D3S_CHANGED) {

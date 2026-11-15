@@ -392,6 +392,19 @@ table sizes, watchdog time, serial speed. `help` on the device lists every setti
 
 ---
 
+### Commanding another digipeater from a second module
+
+With two modules, one can command the other by radio, from the [setup page](https://radiohound.github.io/lora-aprs-digi/tools/setup.html):
+connect the module you hold, set its own callsign, open **Command another digipeater over the air**, enter the other
+digipeater's callsign and its key (the chip ID, or the secret you set with `set secret`), pick or type a command
+(`get battery`, `set moving off`, `beacon`...) and press **Send**. The page signs the command exactly as `tools/remote_code.html`
+does, and the connected module transmits it with the serial command `send CALL text` (an APRS message under its own
+callsign, using its `rc_path`). The reply comes back as a message to the module, and the page picks it out of the packet
+log and shows it. Both modules need the same radio settings and a path to each other (direct, or through a digipeater).
+`SERIAL_SEND 0` in `config_digi3.h` removes the `send` command and saves about 200 bytes of flash.
+
+---
+
 ## Reading the log
 
 With `log on`, every packet heard is printed with its length, RSSI, SNR and frequency error, then what was done:

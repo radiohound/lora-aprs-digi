@@ -48,6 +48,11 @@ details { font-size: 14px; color: var(--muted); }
 .grid { display: grid; gap: 10px; margin: 10px 0; }
 .steps { margin: 6px 0; padding-left: 20px; }
 .check .desc { flex-basis: 100%; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 999px; padding: 5px 10px; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { flex: 1; border: 0; border-radius: 0; background: var(--bg); color: var(--muted); padding: 8px; font-size: 14px; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 .desc { display: block; font-size: 13px; color: var(--muted); line-height: 1.4; }
 .grid label small { color: var(--muted); font-size: 12px; }
 .grid label b { font-weight: 600; color: var(--ink); font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; }
@@ -107,6 +112,33 @@ details { font-size: 14px; color: var(--muted); }
     </details>
   </section>
 
+  <section id="rcbox" hidden>
+    <details>
+      <summary>Command another digipeater over the air</summary>
+      <p class="note">If you have a second module, this one can send it a signed command by radio: read its battery, switch a mode, send a beacon. The message goes out under <b>this</b> module's callsign, so set that first, and the other digipeater answers to it. Both need the same radio settings (frequency, spreading factor, bandwidth), and the other one needs <span class="mono">remote</span> on and a path to this module (direct, or through a digipeater).</p>
+      <label>Digipeater to command, with SSID<input id="rcTarget" class="mono" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="K6ATV-2"></label>
+      <div class="seg" role="group" aria-label="Key">
+        <button type="button" id="rcChip" aria-pressed="true">Chip ID</button>
+        <button type="button" id="rcSecret" aria-pressed="false">Own secret</button>
+      </div>
+      <label id="rcKeyLabel"><span>Chip ID of that digipeater (24 hex digits, printed at its start-up)</span>
+        <input id="rcKey" class="mono" autocomplete="off" spellcheck="false" autocapitalize="characters" placeholder="2F0040001350524E34393620"></label>
+      <label class="check"><input type="checkbox" id="rcRemember"> Remember the callsign and key on this device</label>
+      <label>Command<input id="rcCmd" class="mono" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="get battery"></label>
+      <div class="chips" id="rcChips">
+        <button type="button">get battery</button><button type="button">get mode</button><button type="button">get moving</button>
+        <button type="button">set moving on</button><button type="button">set moving off</button>
+        <button type="button">set mode fillin</button><button type="button">set mode off</button>
+        <button type="button">set beacon_min 60</button><button type="button">save</button><button type="button">beacon</button><button type="button">reboot</button>
+      </div>
+      <p class="err" id="rcerr" hidden></p>
+      <div class="row"><button class="main" id="rcSend">Send the command</button></div>
+      <p class="status" id="rcstatus"></p>
+      <pre id="rcout" class="mono" hidden></pre>
+      <p class="note">The command is signed with the other digipeater's key and a counter from this computer's clock, so a recorded message cannot be replayed. Needs firmware with the <span class="mono">send</span> command (v1.2.2 or newer) on this module. Replies arrive on the packet log, which this turns on.</p>
+    </details>
+  </section>
+
   <section id="idbox" hidden>
     <div class="row"><button id="getid">Read the chip ID (restarts the digipeater)</button></div>
     <div class="id mono" id="chipid" hidden></div>
@@ -139,6 +171,59 @@ details { font-size: 14px; color: var(--muted); }
     </details>
   </section>
 </main>
+<script id="core">
+// A copy of the core in tools/remote_code.html (the codes must be identical: see test/host/test_remote_html.js).
+// SipHash-2-4 and the code: the same as src/digi3/remote.c and tools/remote_code.py.
+const DigiRemote = (() => {
+  const M = (1n << 64n) - 1n;
+  const rotl = (x, b) => ((x << BigInt(b)) | (x >> BigInt(64 - b))) & M;
+  const le64 = (u, o) => { let v = 0n; for (let i = 7; i >= 0; i--) v = (v << 8n) | BigInt(u[o + i]); return v; };
+  function siphash(key, msg) {
+    const k0 = le64(key, 0), k1 = le64(key, 8);
+    const v = [0x736f6d6570736575n ^ k0, 0x646f72616e646f6dn ^ k1, 0x6c7967656e657261n ^ k0, 0x7465646279746573n ^ k1];
+    const rounds = n => { for (let r = 0; r < n; r++) {
+      v[0] = (v[0] + v[1]) & M; v[1] = rotl(v[1], 13); v[1] ^= v[0]; v[0] = rotl(v[0], 32);
+      v[2] = (v[2] + v[3]) & M; v[3] = rotl(v[3], 16); v[3] ^= v[2];
+      v[0] = (v[0] + v[3]) & M; v[3] = rotl(v[3], 21); v[3] ^= v[0];
+      v[2] = (v[2] + v[1]) & M; v[1] = rotl(v[1], 17); v[1] ^= v[2]; v[2] = rotl(v[2], 32); } };
+    const full = msg.length & ~7;
+    for (let i = 0; i < full; i += 8) { const m = le64(msg, i); v[3] ^= m; rounds(2); v[0] ^= m; }
+    let b = BigInt(msg.length & 0xFF) << 56n;
+    for (let i = 0; i < (msg.length & 7); i++) b |= BigInt(msg[full + i]) << BigInt(8 * i);
+    v[3] ^= b; rounds(2); v[0] ^= b;
+    v[2] ^= 0xFFn; rounds(4);
+    return v[0] ^ v[1] ^ v[2] ^ v[3];
+  }
+  const enc = s => new TextEncoder().encode(s);
+  const u32le = (out, o, w) => { for (let i = 0; i < 4; i++) out[o + i] = (w >>> (8 * i)) & 0xFF; };
+  const u64le = (out, o, v) => { for (let i = 0; i < 8; i++) out[o + i] = Number((v >> BigInt(8 * i)) & 0xFFn); };
+  function keyFromChip(id) {
+    const h = id.replace(/[\s:]/g, "");
+    if (!/^[0-9a-fA-F]{24}$/.test(h)) throw new Error("The chip ID is 24 hex digits, as the digi prints it at start-up.");
+    const key = new Uint8Array(16);
+    for (let w = 0; w < 3; w++) u32le(key, 4 * w, parseInt(h.slice(8 * w, 8 * w + 8), 16));
+    key.set(enc("LORA"), 12);
+    return key;
+  }
+  function keyFromSecret(secret) {
+    if (!secret.length || secret.length > 32) throw new Error("The secret is 1 to 32 characters, as set on the digi.");
+    const key = new Uint8Array(16), s = enc(secret);
+    u64le(key, 0, siphash(enc("LoRa-digi-key-A!"), s));
+    u64le(key, 8, siphash(enc("LoRa-digi-key-B!"), s));
+    return key;
+  }
+  const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  function code(key, digi, counter, command) {
+    let h = siphash(key, enc(`${digi.toUpperCase()}|${counter}|${command}`)) & ((1n << 40n) - 1n), out = "";
+    for (let i = 0; i < 8; i++) { out = B32[Number(h & 31n)] + out; h >>= 5n; }
+    return out;
+  }
+  const tidy = c => c.trim().split(/\s+/).join(" ");
+  return { siphash, keyFromChip, keyFromSecret, code, tidy };
+})();
+if (typeof module !== "undefined") module.exports = DigiRemote;
+</script>
+
 <script>
 "use strict";
 const $ = id => document.getElementById(id);
@@ -221,7 +306,7 @@ function fill() {
   $("lon").value = num(settings.lon);
   $("beacon_min").value = num(settings.beacon_min);
   $("batt").value = settings.batt === "off" ? "off" : "on";
-  $("form").hidden = false; $("idbox").hidden = false;
+  $("form").hidden = false; $("idbox").hidden = false; $("rcbox").hidden = false;
 }
 
 function wanted() {
@@ -420,7 +505,7 @@ async function connect() {
 function disconnected() {
   port = null; writer = null;
   $("connect").disabled = false; $("disconnect").disabled = true;
-  $("form").hidden = true; $("idbox").hidden = true; $("allbox").hidden = true;
+  $("form").hidden = true; $("idbox").hidden = true; $("allbox").hidden = true; $("rcbox").hidden = true;
   $("livelog").checked = false;
   status("Not connected.");
 }
@@ -549,11 +634,82 @@ async function doFlash() {
   } finally { $("flashbtn").disabled = !fwBytes || !("serial" in navigator); }
 }
 
+// ---- Command another digipeater over the air: sign a command with its key, and have this module transmit it ----
+const RC_OVER_AIR = ["get", "set", "save", "beacon", "reboot"];
+const RC_LOCAL = ["call", "ssid", "freq", "bw", "sf", "cr", "power", "sync", "preamble", "boosted", "secret", "rc_counter"];
+let rcMode = "chip", rcWatching = null;
+const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+                set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+                del(k) { try { localStorage.removeItem(k); } catch (e) {} } };
+function rcSetMode(m) {
+  rcMode = m;
+  $("rcChip").setAttribute("aria-pressed", m === "chip"); $("rcSecret").setAttribute("aria-pressed", m === "secret");
+  $("rcKeyLabel").firstElementChild.textContent = m === "chip" ? "Chip ID of that digipeater (24 hex digits, printed at its start-up)" : "Secret of that digipeater (set with  set secret ...)";
+  $("rcKey").placeholder = m === "chip" ? "2F0040001350524E34393620" : "your secret";
+  $("rcKey").type = m === "chip" ? "text" : "password";
+}
+function rcFail(msg) { $("rcerr").textContent = msg; $("rcerr").hidden = false; }
+function ownCall() { const c = (settings.call || "").trim(), ss = Number((settings.ssid || "0").split(" ")[0]); return ss ? c + "-" + ss : c; }
+
+async function rcSend() {
+  $("rcerr").hidden = true;
+  const own = ownCall();
+  if (!own || own === "N0CALL" || own === "N0CALL-10") return rcFail("Set this module's own callsign first (the form above), and save it. The other digipeater answers to that callsign.");
+  const digi = $("rcTarget").value.trim().toUpperCase();
+  if (!/^[A-Z0-9]{1,6}(-[0-9]{1,2})?$/.test(digi)) return rcFail("Enter the digipeater's callsign, for example K6ATV-2.");
+  if (digi === own) return rcFail("That is this module's own callsign.");
+  const command = DigiRemote.tidy($("rcCmd").value);
+  if (!command) return rcFail("Enter a command, for example get battery.");
+  const words = command.split(" ");
+  if (!RC_OVER_AIR.includes(words[0].toLowerCase())) return rcFail('"' + words[0] + '" cannot be sent over the air: use get, set, save, beacon or reboot.');
+  if (words[0].toLowerCase() === "set" && RC_LOCAL.includes((words[1] || "").toLowerCase())) return rcFail(words[1] + " can only be changed on the digipeater's serial port.");
+  let key;
+  try { key = rcMode === "chip" ? DigiRemote.keyFromChip($("rcKey").value) : DigiRemote.keyFromSecret($("rcKey").value); } catch (e) { return rcFail(e.message); }
+  const now = Math.floor(Date.now() / 1000), lastKey = "digi-rc-last-" + digi;                 // always above the last counter used for this digipeater
+  const counter = Math.max(now, (parseInt(store.get(lastKey) || "0", 10) || 0) + 1);
+  const text = counter + " " + command + " " + DigiRemote.code(key, digi, counter, command);
+  if (text.length > 67) return rcFail("Too long for one APRS message (" + text.length + " of 67 characters): shorten the command.");
+  const yr = new Date(now * 1000).getFullYear();
+  if (yr < 2026 || yr > 2035) return rcFail("This computer's clock says " + yr + ". The counter comes from the clock, so a wrong clock would be refused or lock later commands out.");
+  if ($("rcRemember").checked) { store.set("digi-rc-digi", digi); store.set("digi-rc-mode", rcMode); store.set("digi-rc-key", $("rcKey").value); }
+  store.set(lastKey, String(counter));
+
+  $("rcSend").disabled = true;
+  try {
+    if (!$("livelog").checked) { $("livelog").checked = true; await send("set log on"); }
+    const out = await ask("send " + digi + " " + text, l => /^(ok:|error:)/.test(l), 3000);
+    const bad = out.find(l => l.startsWith("error:"));
+    if (!out.length) return rcFail("No answer from this module.");
+    if (bad) return rcFail(/unknown command/.test(bad) ? "This module's firmware has no send command. Update its firmware (v1.2.2 or newer)." : bad.slice(6).trim());
+    $("rcout").hidden = false; $("rcout").textContent = "sent to " + digi + ": " + text + "\n";
+    $("rcstatus").textContent = "Sent. Waiting up to a minute for the reply (a slow radio link takes a few seconds each way)...";
+    if (rcWatching) waiters = waiters.filter(x => x !== rcWatching);
+    const pad = own.padEnd(9, " ");
+    const w = line => {
+      const i = line.indexOf("::" + pad + ":"); if (i < 0) return;
+      const from = /([A-Z0-9]+(?:-[0-9]+)?)>[^:]*::/.exec(line); const body = line.slice(i + 12).replace(/\{[^}]*\}.*$/, "");
+      if (/^ack/i.test(body)) $("rcout").textContent += "ack from " + (from ? from[1] : "?") + "\n";
+      else { $("rcout").textContent += "reply from " + (from ? from[1] : "?") + ": " + body + "\n"; $("rcstatus").textContent = "Reply received."; }
+    };
+    rcWatching = w; waiters.push(w);
+    setTimeout(() => { waiters = waiters.filter(x => x !== w); if ($("rcstatus").textContent.startsWith("Sent")) $("rcstatus").textContent = "No reply heard. It may be out of range, have remote off, or the key or counter was wrong."; }, 60000);
+  } finally { $("rcSend").disabled = false; }
+}
+
 $("connect").onclick = connect;
 $("disconnect").onclick = disconnect;
 $("save").onclick = save;
 $("saveall").onclick = saveAll;
 $("flashbtn").onclick = doFlash;
+$("rcChip").onclick = () => rcSetMode("chip"); $("rcSecret").onclick = () => rcSetMode("secret");
+$("rcSend").onclick = rcSend;
+$("rcCmd").addEventListener("keydown", e => { if (e.key === "Enter") rcSend(); });
+for (const b of $("rcChips").querySelectorAll("button")) b.onclick = () => { $("rcCmd").value = b.textContent; $("rcCmd").focus(); };
+if (store.get("digi-rc-remember") === "1") {
+  $("rcRemember").checked = true; $("rcTarget").value = store.get("digi-rc-digi") || "";
+  rcSetMode(store.get("digi-rc-mode") === "secret" ? "secret" : "chip"); $("rcKey").value = store.get("digi-rc-key") || "";
+}
+$("rcRemember").onchange = () => { if ($("rcRemember").checked) store.set("digi-rc-remember", "1"); else ["digi-rc-remember", "digi-rc-digi", "digi-rc-mode", "digi-rc-key"].forEach(store.del); };
 $("livelog").onchange = async () => {
   if (!port) { $("livelog").checked = false; status("Connect first."); return; }
   try { await send($("livelog").checked ? "set log on" : "set log off"); } catch (e) {}
