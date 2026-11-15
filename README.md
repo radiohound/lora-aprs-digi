@@ -35,8 +35,8 @@ frame (`3C FF 01` + TNC2 text) is sent again as the same text with the new path.
 | Mode | Repeats |
 |---|---|
 | `off` | nothing (it still beacons and answers settings messages) |
-| `fillin` | `WIDE1-1` and packets addressed to its own callsign (`MYCALL`) → `MYCALL*` |
-| `wide` (default) | also `WIDE2-1` → `MYCALL*`, and `WIDE2-2` → `MYCALL*,WIDE2-1` |
+| `fillin` (default) | `WIDE1-1` and packets addressed to its own callsign (`MYCALL`) → `MYCALL*` |
+| `wide` | also `WIDE2-1` → `MYCALL*`, and `WIDE2-2` → `MYCALL*,WIDE2-1` |
 
 It never repeats a path that breaks the WIDEn-N rule, its own packets, a packet it already repeated, or the same
 packet twice within 30 seconds (`dedupe`).
@@ -252,7 +252,7 @@ show
 callsign K6ATV-2
 call = K6ATV *
 ssid = 2 *
-mode = wide
+mode = fillin
 delay_min = 100 ms
 delay_max = 500 ms
 cad_difs = 2 checks
@@ -351,7 +351,7 @@ Defaults are the values in `src/digi3/config_digi3.h`. **Radio** settings need `
 |---|---|---|---|
 | `call` * | `N0CALL` | 1–6 letters/digits | callsign (accepts `-SSID` when set) |
 | `ssid` * | 10 | 0–99 | 0 = none (the AX.25 spec stops at 15, but higher ones such as -30 are widely used) |
-| `mode` | `wide` | `off`, `fillin`, `wide` | which hops are repeated (see above); `off` repeats nothing but still beacons and answers settings messages |
+| `mode` | `fillin` | `off`, `fillin`, `wide` | which hops are repeated (see above); `off` repeats nothing but still beacons and answers settings messages |
 | `delay_min`, `delay_max` | 100, 500 ms | 0–10000 | random wait before repeating (`delay_min` ≤ `delay_max`) |
 | `cad_difs` | 2 | 1–10 | free channel checks in a row before transmitting |
 | `cad_backoff` | 4 | 1–20 slots | longest random wait when the channel is busy |

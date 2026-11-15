@@ -18,7 +18,7 @@
 //   D3_MODE_OFF     repeats nothing (it still beacons and answers settings messages)
 //   D3_MODE_FILLIN  WIDE1-1 and packets addressed to this callsign (a low, local fill-in digi)
 //   D3_MODE_WIDE    also WIDE2-1 and WIDE2-2 (a high site that covers a wide area)
-#define DIGI_MODE           D3_MODE_WIDE
+#define DIGI_MODE           D3_MODE_FILLIN      // WIDE1-1 only: the right choice for LoRa APRS, where wider paths flood a slow channel
 #define DIGI_DELAY_MIN_MS   100             // random wait before repeating, so two digis rarely key at once
 #define DIGI_DELAY_MAX_MS   500
 #define DIGI_QUEUE_SIZE     4
