@@ -5,6 +5,8 @@ packets (`3C FF 01` + text), with a fill-in or wide path rule, an optional **mov
 up over a serial port or, for most settings, by an APRS message over the air: callsign, SSID, mode, radio settings and
 the rest are typed in and saved in the chip itself. No reflashing to change a setting.
 
+**Download:** prebuilt firmware (`.bin` and `.hex`) is on the [Releases page](https://github.com/radiohound/lora-aprs-digi/releases/latest). Flash it with an ST-LINK, no build needed.
+
 > **Status:** tested on a PC and on an E77 on the air (see [What has been tested](#what-has-been-tested)). MIT licence.
 
 - [What it does](#what-it-does)
@@ -89,6 +91,8 @@ runs to an SMA bulkhead on the case for an external antenna.
 ---
 
 ## Build and flash
+
+**Prebuilt:** download `lora-aprs-digi-e77.bin` (flash at `0x08000000`) or the `.hex` from the [latest release](https://github.com/radiohound/lora-aprs-digi/releases/latest), check it against `SHA256SUMS.txt`, and program it with an ST-LINK (for example STM32CubeProgrammer). To build it yourself:
 
 Needs [PlatformIO](https://platformio.org/) (VS Code extension, or `pio` on the command line).
 
