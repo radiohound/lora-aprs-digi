@@ -46,6 +46,7 @@ button:disabled { opacity: .45; cursor: default; }
 pre { margin: 0; background: var(--code-bg); border-radius: 6px; padding: 10px; font-size: 12px; max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 details { font-size: 14px; color: var(--muted); }
 .grid { display: grid; gap: 10px; margin: 10px 0; }
+.steps { margin: 6px 0; padding-left: 20px; }
 .desc { display: block; font-size: 13px; color: var(--muted); line-height: 1.4; }
 .grid label small { color: var(--muted); font-size: 12px; }
 .grid label b { font-weight: 600; color: var(--ink); font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; }
@@ -109,6 +110,23 @@ details { font-size: 14px; color: var(--muted); }
     <div class="row"><button id="getid">Read the chip ID (restarts the digipeater)</button></div>
     <div class="id mono" id="chipid" hidden></div>
     <p class="note">The chip ID is the key for over-the-air commands. Paste it into the remote page. It is only printed at start-up, so the digipeater restarts. Saved settings are kept.</p>
+  </section>
+
+  <section id="flashbox">
+    <details>
+      <summary>Update the firmware (USB cable)</summary>
+      <ol class="note steps">
+        <li>Hold <b>Key 1</b> (the middle button, 用户按键1) and tap <b>Reset</b> (the top button). Keep holding Key 1 for about a second, then let go. The board is now waiting for new firmware.</li>
+        <li>Press <b>Flash firmware</b> and pick the board's USB port. It takes about half a minute.</li>
+      </ol>
+      <p class="note" id="fwinfo">Looking for the firmware that comes with this page...</p>
+      <label>Or flash a different .bin file<input type="file" id="fwfile" accept=".bin"></label>
+      <progress id="fwprog" max="100" value="0" hidden style="width:100%"></progress>
+      <div class="row"><button class="main" id="flashbtn" disabled>Flash firmware</button></div>
+      <p class="status" id="flashstatus"></p>
+      <pre id="flashlog" class="mono" hidden></pre>
+      <p class="note">Only the program area is rewritten, so your saved settings are kept. This needs a board that already runs firmware v1.1.0 or newer (it has the key that opens the bootloader). An older board, or one that will not start, needs an ST-LINK once.</p>
+    </details>
   </section>
 
   <section>
@@ -382,6 +400,7 @@ async function getId() {
 async function connect() {
   try {
     port = await navigator.serial.requestPort();
+    lastPort = port;
     await port.open({ baudRate: 115200 });
   } catch (e) { port = null; status(e.name === "NotFoundError" ? "No port chosen." : "Could not open the port: " + e.message); return; }
   writer = port.writable.getWriter();
@@ -406,10 +425,118 @@ async function disconnect() {
   disconnected();
 }
 
+// ---- Update the firmware over the chip's built-in serial bootloader (ST application note AN3155) ----
+let lastPort = null, fwBytes = null, fwName = "";
+const FLASH = 0x08000000, PAGE = 2048, MAXFW = 260096;      // the last 2 KB page holds the settings: the program may not reach it
+const xr = bs => bs.reduce((a, b) => a ^ b, 0);
+const be = (n, len) => { const o = []; for (let i = len - 1; i >= 0; i--) o.push((n >>> (8 * i)) & 255); return o; };
+const hex = b => [...new Uint8Array(b)].map(v => v.toString(16).padStart(2, "0")).join("");
+function flog(t) { const e = $("flashlog"); e.hidden = false; e.textContent += t + "\n"; e.scrollTop = e.scrollHeight; }
+function fstatus(t) { $("flashstatus").textContent = t; }
+
+async function runFlash(p, data, progress) {
+  await p.open({ baudRate: 115200, dataBits: 8, stopBits: 1, parity: "even", bufferSize: 4096 });   // 8E1: what the bootloader speaks
+  const w = p.writable.getWriter(), r = p.readable.getReader();
+  const q = []; let wake = null, stop = false;
+  (async () => { try { while (!stop) { const { value, done } = await r.read(); if (done) break; for (const v of value) q.push(v); if (wake) wake(); } } catch (e) {} })();
+  const rx = async (n, ms = 2000) => {
+    const end = Date.now() + ms;
+    while (q.length < n) {
+      const left = end - Date.now();
+      if (left <= 0) throw new Error("no answer from the board. Is it in the bootloader? (hold Key 1, tap Reset, keep holding a second)");
+      await new Promise(res => { wake = res; setTimeout(res, left); });
+    }
+    return q.splice(0, n);
+  };
+  const tx = b => w.write(new Uint8Array(b));
+  const ack = async (ms, what) => { const b = (await rx(1, ms))[0]; if (b !== 0x79) throw new Error("the bootloader refused " + what + " (0x" + b.toString(16) + ")"); };
+  const cmd = async c => { await tx([c, c ^ 0xff]); await ack(2000, "command 0x" + c.toString(16)); };
+  try {
+    await tx([0x7f]);                                           // start byte; a bootloader that is already awake does not answer it
+    try { await rx(1, 700); } catch (e) {}
+    q.length = 0;
+    await cmd(0x00); const n = (await rx(1))[0]; const info = await rx(n + 1); await ack(2000, "the version request");
+    flog("bootloader version 0x" + info[0].toString(16));
+    const pages = Math.ceil(data.length / PAGE);
+    await cmd(0x44);                                            // extended erase, just the pages the program needs
+    const body = be(pages - 1, 2); for (let i = 0; i < pages; i++) body.push(...be(i, 2));
+    await tx([...body, xr(body)]); await ack(30000, "the erase");
+    flog("erased " + pages + " pages");
+    for (let off = 0; off < data.length; off += 256) {
+      const chunk = [...data.subarray(off, off + 256)];
+      await cmd(0x31);
+      const ad = be(FLASH + off, 4); await tx([...ad, xr(ad)]); await ack(2000, "an address");
+      const pl = [chunk.length - 1, ...chunk]; await tx([...pl, xr(pl)]); await ack(5000, "the write at 0x" + (FLASH + off).toString(16));
+      progress(0.5 * off / data.length);
+    }
+    flog("written, checking...");
+    for (let off = 0; off < data.length; off += 256) {
+      const len = Math.min(256, data.length - off);
+      await cmd(0x11);
+      const ad = be(FLASH + off, 4); await tx([...ad, xr(ad)]); await ack(2000, "a read address");
+      await tx([len - 1, (len - 1) ^ 0xff]); await ack(2000, "a read length");
+      const got = await rx(len, 3000);
+      for (let i = 0; i < len; i++) if (got[i] !== data[off + i]) throw new Error("the check failed at 0x" + (FLASH + off + i).toString(16));
+      progress(0.5 + 0.5 * off / data.length);
+    }
+    flog("verified OK");
+    await cmd(0x21); const ad = be(FLASH, 4); await tx([...ad, xr(ad)]); await ack(2000, "the start");
+    flog("started the program");
+  } finally {
+    stop = true;
+    try { await r.cancel(); } catch (e) {}
+    try { r.releaseLock(); w.releaseLock(); } catch (e) {}
+    try { await p.close(); } catch (e) {}
+  }
+}
+
+function checkImage(d) {
+  if (d.length < 1024 || d.length > MAXFW) return "That file is not firmware for this chip (" + d.length + " bytes; it must be 1 KB to " + (MAXFW / 1024) + " KB).";
+  if (d[3] !== 0x20) return "That file does not look like STM32 firmware (its first word is not a RAM address).";
+  return "";
+}
+
+async function showFw(name, bytes) {
+  fwBytes = new Uint8Array(bytes.length % 4 ? bytes.length + 4 - bytes.length % 4 : bytes.length).fill(255); fwBytes.set(bytes);
+  fwName = name;
+  const e = checkImage(bytes);
+  let h = ""; try { h = hex(await crypto.subtle.digest("SHA-256", bytes)).slice(0, 16); } catch (x) {}
+  $("fwinfo").textContent = e || (name + ": " + bytes.length + " bytes" + (h ? ", SHA-256 starts " + h : "") + ".");
+  $("flashbtn").disabled = !!e || !("serial" in navigator);
+  if (e) fwBytes = null;
+}
+
+async function loadBundled() {
+  try {
+    const v = (await (await fetch("../firmware/version.txt", { cache: "no-cache" })).text()).trim();
+    const b = new Uint8Array(await (await fetch("../firmware/lora-aprs-digi-e77.bin", { cache: "no-cache" })).arrayBuffer());
+    await showFw("Firmware " + v, b);
+  } catch (e) { $("fwinfo").textContent = "No firmware comes with this copy of the page. Choose a .bin file below."; }
+}
+
+async function doFlash() {
+  const e = fwBytes ? "" : "Choose a firmware file first.";
+  if (e) { fstatus(e); return; }
+  $("flashbtn").disabled = true; $("flashlog").textContent = ""; $("fwprog").hidden = false; $("fwprog").value = 0;
+  try {
+    if (port) await disconnect();                               // the settings connection uses the same port
+    if (!lastPort) lastPort = await navigator.serial.requestPort();
+    fstatus("Flashing " + fwName + "...");
+    await runFlash(lastPort, fwBytes, f => { $("fwprog").value = Math.round(f * 100); });
+    $("fwprog").value = 100;
+    fstatus("Done. The new firmware is running. Press Connect above to set it up.");
+  } catch (err) {
+    fstatus(err.name === "NotFoundError" ? "No port chosen." : "Failed: " + err.message);
+  } finally { $("flashbtn").disabled = !fwBytes || !("serial" in navigator); }
+}
+
 $("connect").onclick = connect;
 $("disconnect").onclick = disconnect;
 $("save").onclick = save;
 $("saveall").onclick = saveAll;
+$("flashbtn").onclick = doFlash;
+$("fwfile").onchange = async ev => { const f = ev.target.files[0]; if (f) await showFw(f.name, new Uint8Array(await f.arrayBuffer())); };
+loadBundled();
 $("reread").onclick = readSettings;
 $("getid").onclick = getId;
 $("here").onclick = () => {
