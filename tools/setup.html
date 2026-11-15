@@ -67,7 +67,7 @@ details { font-size: 14px; color: var(--muted); }
   <section id="form" hidden>
     <div class="row">
       <label>Callsign (without SSID)<input id="call" class="mono" maxlength="6" autocapitalize="characters" spellcheck="false"></label>
-      <label>SSID (0 to 15)<input id="ssid" class="mono" type="number" min="0" max="15"></label>
+      <label>SSID (0 to 99)<input id="ssid" class="mono" type="number" min="0" max="99"></label>
     </div>
     <label>Mode
       <select id="mode"><option value="off">off (repeats nothing)</option><option value="fillin">fillin (WIDE1-1 only)</option><option value="wide">wide (WIDE1-1, WIDE2-1, WIDE2-2)</option></select>
@@ -199,7 +199,7 @@ function wanted() {
 
 function problem(w) {
   if (!/^[A-Z0-9]{3,6}$/.test(w.call)) return "The callsign is 3 to 6 letters or digits, without the SSID.";
-  const ss = Number(w.ssid); if (!Number.isInteger(ss) || ss < 0 || ss > 15) return "The SSID is 0 to 15.";
+  const ss = Number(w.ssid); if (!Number.isInteger(ss) || ss < 0 || ss > 99) return "The SSID is 0 to 99.";
   const la = Number(w.lat), lo = Number(w.lon);
   if (w.lat === "" || w.lon === "" || !isFinite(la) || !isFinite(lo)) return "Enter the latitude and longitude as decimal degrees (or press Use my location).";
   if (Math.abs(la) > 90 || Math.abs(lo) > 180) return "Latitude is -90 to 90, longitude -180 to 180.";

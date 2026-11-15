@@ -319,7 +319,7 @@ Defaults are the values in `src/digi3/config_digi3.h`. **Radio** settings need `
 | Name | Default | Range | Meaning |
 |---|---|---|---|
 | `call` * | `N0CALL` | 1–6 letters/digits | callsign (accepts `-SSID` when set) |
-| `ssid` * | 10 | 0–15 | 0 = none |
+| `ssid` * | 10 | 0–99 | 0 = none (the AX.25 spec stops at 15, but higher ones such as -30 are widely used) |
 | `mode` | `wide` | `off`, `fillin`, `wide` | which hops are repeated (see above); `off` repeats nothing but still beacons and answers settings messages |
 | `delay_min`, `delay_max` | 100, 500 ms | 0–10000 | random wait before repeating (`delay_min` ≤ `delay_max`) |
 | `cad_difs` | 2 | 1–10 | free channel checks in a row before transmitting |

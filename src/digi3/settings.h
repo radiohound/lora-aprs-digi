@@ -19,7 +19,7 @@ extern "C" {
 typedef struct {
     /* identity */
     char     call[8];             /* base callsign, 1 to 6 characters; the SSID is separate */
-    uint8_t  ssid;                /* 0 to 15; 0 = none */
+    uint8_t  ssid;                /* 0 to 99 (the spec says 15, but -22, -30 and more are in common use); 0 = none */
     /* digipeater */
     uint8_t  mode;                /* D3_MODE_OFF, D3_MODE_FILLIN or D3_MODE_WIDE */
     uint16_t delay_min_ms, delay_max_ms;

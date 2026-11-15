@@ -35,7 +35,7 @@ typedef struct {
 /* The id of a setting in the flash record is its position here. ONLY APPEND (after the first public release). */
 static const field_t FIELDS[] = {
     /*  0 */ STRF ("call", call, CS_CALL, F_CALL | F_LOCAL, 1, 6),
-    /*  1 */ NUMF ("ssid", ssid, 0, F_LOCAL, 0, 15, ""),
+    /*  1 */ NUMF ("ssid", ssid, 0, F_LOCAL, 0, 99, ""),
     /*  2 */ { "mode", K_MODE, SZ(mode), 0, 0, 0, OFS(mode), D3_MODE_OFF, D3_MODE_WIDE, "off|fillin|wide" },
     /*  3 */ NUMF ("delay_min", delay_min_ms, 0, 0, 0, 10000, "ms"),
     /*  4 */ NUMF ("delay_max", delay_max_ms, 0, 0, 0, 10000, "ms"),
@@ -293,7 +293,7 @@ static const char *set_field(d3_settings_t *t, const field_t *f, char *val)
                 *h = 0;
                 e = parse_num(h + 1, 0, 0, &ss);
                 if (e) return "bad SSID";
-                if (ss < 0 || ss > 15) return "SSID must be 0 to 15";
+                if (ss < 0 || ss > 99) return "SSID must be 0 to 99";
                 t->ssid = (uint8_t)ss;
             }
         }

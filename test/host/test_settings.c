@@ -43,7 +43,9 @@ static void test_commands(void)
     d3s_fullcall(&s, fc, sizeof fc); CHECK(strcmp(fc, "K6ATV-2") == 0 && !(f & D3S_CHANGED));
     f = run(&s, "SET CALL w2hab-11");                   /* commands and names are not case sensitive */
     d3s_fullcall(&s, fc, sizeof fc); CHECK(strcmp(fc, "W2HAB-11") == 0 && (f & D3S_CHANGED));
-    f = run(&s, "set call K6ATV-16"); CHECK(!f && said("error") && strcmp(s.call, "W2HAB") == 0 && s.ssid == 11);   /* refused: nothing changed, not even the call */
+    f = run(&s, "set call K6ATV-100"); CHECK(!f && said("error") && strcmp(s.call, "W2HAB") == 0 && s.ssid == 11);   /* refused: nothing changed, not even the call */
+    f = run(&s, "set call K6ATV-31"); d3s_fullcall(&s, fc, sizeof fc); CHECK(!said("error") && strcmp(fc, "K6ATV-31") == 0);   /* above 15 is accepted: -22 and -30 are in common use */
+    run(&s, "set call W2HAB-11");
     run(&s, "set call K6ATV-x");   CHECK(said("error") && strcmp(s.call, "W2HAB") == 0);
     run(&s, "set call TOOLONGCALL"); CHECK(said("error") && strcmp(s.call, "W2HAB") == 0);
     run(&s, "set call K6 ATV");    CHECK(said("not allowed") && strcmp(s.call, "W2HAB") == 0);
