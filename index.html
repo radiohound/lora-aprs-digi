@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LoRa APRS Digipeater</title>
+<style>
+:root { --bg:#f4f6f5; --panel:#fff; --ink:#16201e; --muted:#5b6a67; --line:#d4dcd9; --accent:#0d6e63; color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root { --bg:#111816; --panel:#19221f; --ink:#e3ebe8; --muted:#9aaaa6; --line:#2d3a37; --accent:#3fbfae; color-scheme: dark; } }
+* { box-sizing: border-box; }
+html, body { margin:0; background:var(--bg); color:var(--ink); }
+body { font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; padding:max(14px,env(safe-area-inset-top)) 16px 32px; }
+main { max-width:600px; margin:0 auto; display:grid; gap:14px; }
+h1 { font-size:22px; margin:4px 0 0; }
+p { margin:0; color:var(--muted); font-size:14px; }
+a.card { display:block; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px; color:var(--ink); text-decoration:none; }
+a.card:hover, a.card:focus-visible { border-color:var(--accent); outline:none; }
+a.card b { color:var(--accent); display:block; margin-bottom:2px; }
+a.card span { color:var(--muted); font-size:14px; }
+</style>
+</head>
+<body>
+<main>
+  <div>
+    <h1>LoRa APRS Digipeater</h1>
+    <p>A small LoRa APRS digipeater for the Ebyte E77-400MBL-01 (STM32WLE5CC, 433 MHz).</p>
+  </div>
+  <a class="card" href="tools/setup.html"><b>Setup</b><span>Set the callsign, mode and position from the browser over the USB cable. Chrome or Edge.</span></a>
+  <a class="card" href="tools/remote_code.html"><b>Remote commands</b><span>Make the APRS message that changes a setting on a digipeater over the air.</span></a>
+  <a class="card" href="https://github.com/radiohound/lora-aprs-digi/releases/latest"><b>Download firmware</b><span>Prebuilt .bin and .hex, no build needed.</span></a>
+  <a class="card" href="https://github.com/radiohound/lora-aprs-digi#readme"><b>Documentation</b><span>Hardware, settings, remote control and source on GitHub.</span></a>
+</main>
+</body>
+</html>
