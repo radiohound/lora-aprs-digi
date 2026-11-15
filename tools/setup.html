@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LoRa APRS Digi Setup</title>
+<!--
+  Sets up a LoRa APRS digipeater (STM32WLE5) from the browser, over its USB-serial port, with no terminal program.
+  It talks the same commands you would type (show, set, save), using Web Serial: Chrome, Edge or another
+  Chromium browser, on a page served over https:// (GitHub Pages) or opened from a file. Nothing leaves this page.
+  Keep your own copy if you handle a secret: whoever can change the page you use could change it to leak your key.
+-->
+<style>
+:root {
+  --bg: #f4f6f5; --panel: #ffffff; --ink: #16201e; --muted: #5b6a67; --line: #d4dcd9; --accent: #0d6e63; --accent-ink: #ffffff;
+  --warn: #9a4d00; --bad: #b3261e; --code-bg: #e9efed;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #111816; --panel: #19221f; --ink: #e3ebe8; --muted: #9aaaa6; --line: #2d3a37; --accent: #3fbfae; --accent-ink: #062320;
+          --warn: #f0a24a; --bad: #ff8a80; --code-bg: #0c1312; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); }
+body { font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: max(14px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 32px max(16px, env(safe-area-inset-left)); }
+main { max-width: 600px; margin: 0 auto; display: grid; gap: 14px; }
+h1 { font-size: 22px; margin: 4px 0 0; }
+.sub { color: var(--muted); margin: 0; font-size: 14px; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: grid; gap: 12px; }
+label { display: grid; gap: 4px; font-size: 14px; color: var(--muted); }
+input, select { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 9px 10px; width: 100%; }
+input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
+.row > * { flex: 1 1 120px; }
+button { font: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; background: var(--bg); color: var(--ink); cursor: pointer; }
+button.main { font-weight: 600; border: 0; background: var(--accent); color: var(--accent-ink); }
+button:disabled { opacity: .45; cursor: default; }
+.note { font-size: 13px; color: var(--muted); margin: 0; }
+.err { color: var(--bad); font-size: 14px; margin: 0; }
+.warn { color: var(--warn); font-size: 14px; margin: 0; }
+.check { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 14px; }
+.check input { width: auto; }
+.status { font-size: 14px; }
+.id { background: var(--code-bg); border-radius: 6px; padding: 10px; overflow-wrap: anywhere; user-select: all; }
+pre { margin: 0; background: var(--code-bg); border-radius: 6px; padding: 10px; font-size: 12px; max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+details { font-size: 14px; color: var(--muted); }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div>
+    <h1>LoRa APRS Digi Setup</h1>
+    <p class="sub">Connect the digipeater with its USB cable, read its settings, change them in a form and save. Nothing leaves this page.</p>
+  </div>
+
+  <section>
+    <div class="row">
+      <button class="main" id="connect">Connect</button>
+      <button id="disconnect" disabled>Disconnect</button>
+    </div>
+    <p class="status" id="status">Not connected.</p>
+    <p class="err" id="nosupport" hidden>This browser has no Web Serial. Use Chrome or Edge on a computer (not a phone), and open this page over https or from a saved file.</p>
+  </section>
+
+  <section id="form" hidden>
+    <div class="row">
+      <label>Callsign (without SSID)<input id="call" class="mono" maxlength="6" autocapitalize="characters" spellcheck="false"></label>
+      <label>SSID (0 to 15)<input id="ssid" class="mono" type="number" min="0" max="15"></label>
+    </div>
+    <label>Mode
+      <select id="mode"><option value="off">off (repeats nothing)</option><option value="fillin">fillin (WIDE1-1 only)</option><option value="wide">wide (WIDE1-1, WIDE2-1, WIDE2-2)</option></select>
+    </label>
+    <label class="check"><input type="checkbox" id="moving"> Moving stations only (repeats trackers, skips fixed stations)</label>
+    <label>Beacon comment (up to 43 characters)<input id="comment" maxlength="43"></label>
+    <div class="row">
+      <label>Latitude (decimal degrees)<input id="lat" class="mono" inputmode="decimal" placeholder="37.123456"></label>
+      <label>Longitude<input id="lon" class="mono" inputmode="decimal" placeholder="-120.123456"></label>
+    </div>
+    <div class="row"><button id="here">Use my location</button></div>
+    <div class="row">
+      <label>Beacon every (minutes)<input id="beacon_min" class="mono" type="number" min="1" max="1440"></label>
+      <label>Battery sensing<select id="batt"><option value="on">on</option><option value="off">off</option></select></label>
+    </div>
+    <p class="err" id="formerr" hidden></p>
+    <div class="row">
+      <button class="main" id="save">Save to the digipeater</button>
+      <button id="reread">Read again</button>
+    </div>
+    <p class="note">Radio settings (frequency, bandwidth, spreading factor) and the key are not here. Use the terminal for those.</p>
+  </section>
+
+  <section id="idbox" hidden>
+    <div class="row"><button id="getid">Read the chip ID (restarts the digipeater)</button></div>
+    <div class="id mono" id="chipid" hidden></div>
+    <p class="note">The chip ID is the key for over-the-air commands. Paste it into the remote page. It is only printed at start-up, so the digipeater restarts. Saved settings are kept.</p>
+  </section>
+
+  <section>
+    <details>
+      <summary>Serial log</summary>
+      <pre id="log" class="mono"></pre>
+    </details>
+  </section>
+</main>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+let port = null, reader = null, writer = null, buf = "", waiters = [], settings = {}, shownCall = "";
+
+const logEl = $("log");
+function logLine(s) { logEl.textContent += s + "\n"; logEl.scrollTop = logEl.scrollHeight; if (logEl.textContent.length > 20000) logEl.textContent = logEl.textContent.slice(-10000); }
+function status(s) { $("status").textContent = s; }
+
+// Reads lines from the port; every complete line goes to the log and to whoever is waiting for it.
+async function pump() {
+  const dec = new TextDecoder();
+  try {
+    while (port && port.readable) {
+      reader = port.readable.getReader();
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          let i;
+          while ((i = buf.search(/\r\n|\n|\r/)) >= 0) {
+            const line = buf.slice(0, i); buf = buf.slice(i).replace(/^(\r\n|\n|\r)/, "");
+            if (line) { logLine(line); waiters.slice().forEach(w => w(line)); }
+          }
+        }
+      } finally { reader.releaseLock(); reader = null; }
+    }
+  } catch (e) { logLine("[read error] " + e.message); }
+  if (port) disconnected();
+}
+
+async function send(text) { await writer.write(new TextEncoder().encode(text + "\n")); }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// Sends one command and collects the lines that come back until the line "stop" matches, or the time runs out.
+function ask(cmd, stop, ms) {
+  return new Promise(async resolve => {
+    const got = [];
+    const w = line => { got.push(line); if (stop(line)) done(); };
+    const t = setTimeout(done, ms || 2500);
+    function done() { clearTimeout(t); waiters = waiters.filter(x => x !== w); resolve(got); }
+    waiters.push(w);
+    try { await send(cmd); } catch (e) { done(); }
+  });
+}
+
+async function readSettings() {
+  status("Reading the settings...");
+  await send("set log off");                                       // packet log lines would mix into the answers
+  await sleep(200);
+  const lines = await ask("show", l => l.startsWith("* = serial port only"), 3000);
+  settings = {}; shownCall = "";
+  for (const l of lines) {
+    let m = /^callsign (\S+)/.exec(l); if (m) { shownCall = m[1]; continue; }
+    m = /^([a-z_0-9]+) = (.*?)( \*)?$/.exec(l); if (m) settings[m[1]] = m[2];
+  }
+  if (!("call" in settings)) { status("Connected, but the digipeater did not answer. Is it the right port? (115200 baud)"); return false; }
+  fill();
+  status("Connected. " + (shownCall ? "Callsign " + shownCall + ". " : "") + "Settings read.");
+  return true;
+}
+
+// Values as `show` prints them -> the form. A "-" means empty; numbers carry a unit.
+function fill() {
+  const num = s => (s || "").split(" ")[0];
+  $("call").value = settings.call === "-" ? "" : settings.call || "";
+  $("ssid").value = num(settings.ssid);
+  $("mode").value = settings.mode || "off";
+  $("moving").checked = settings.moving === "on";
+  $("comment").value = settings.comment === "-" ? "" : settings.comment || "";
+  $("lat").value = num(settings.lat);
+  $("lon").value = num(settings.lon);
+  $("beacon_min").value = num(settings.beacon_min);
+  $("batt").value = settings.batt === "off" ? "off" : "on";
+  $("form").hidden = false; $("idbox").hidden = false;
+}
+
+function wanted() {
+  const call = $("call").value.trim().toUpperCase();
+  return {
+    call: call || "-",
+    ssid: String($("ssid").value || "0"),
+    mode: $("mode").value,
+    moving: $("moving").checked ? "on" : "off",
+    comment: $("comment").value.trim() || "-",
+    lat: $("lat").value.trim(),
+    lon: $("lon").value.trim(),
+    beacon_min: String($("beacon_min").value),
+    batt: $("batt").value,
+  };
+}
+
+function problem(w) {
+  if (!/^[A-Z0-9]{3,6}$/.test(w.call)) return "The callsign is 3 to 6 letters or digits, without the SSID.";
+  const ss = Number(w.ssid); if (!Number.isInteger(ss) || ss < 0 || ss > 15) return "The SSID is 0 to 15.";
+  const la = Number(w.lat), lo = Number(w.lon);
+  if (w.lat === "" || w.lon === "" || !isFinite(la) || !isFinite(lo)) return "Enter the latitude and longitude as decimal degrees (or press Use my location).";
+  if (Math.abs(la) > 90 || Math.abs(lo) > 180) return "Latitude is -90 to 90, longitude -180 to 180.";
+  const b = Number(w.beacon_min); if (!Number.isInteger(b) || b < 1 || b > 1440) return "Beacon interval is 1 to 1440 minutes.";
+  if (w.comment.length > 43) return "The comment is at most 43 characters.";
+  return "";
+}
+
+// Only the settings that differ from what the digipeater has are sent.
+function currentOf(name) { const v = settings[name]; return v === undefined ? undefined : v.split(" ")[0]; }
+async function save() {
+  const w = wanted(), err = problem(w), fe = $("formerr");
+  fe.hidden = !err; fe.textContent = err;
+  if (err) return;
+  $("save").disabled = true;
+  try {
+    const order = ["call", "ssid", "mode", "moving", "comment", "lat", "lon", "beacon_min", "batt"];
+    const failed = [];
+    let sent = 0;
+    for (const name of order) {
+      const want = w[name];
+      const have = name === "comment" ? (settings.comment === undefined ? undefined : settings.comment) : currentOf(name);
+      if (name === "lat" || name === "lon") { if (have !== undefined && Number(have) === Number(want)) continue; }
+      else if (have === want) continue;
+      const out = await ask("set " + name + " " + want, l => /^(ok:|error:)/.test(l), 2000);
+      sent++;
+      const bad = out.find(l => l.startsWith("error:"));
+      if (bad) failed.push(name + ": " + bad.slice(6).trim());
+    }
+    if (failed.length) { fe.hidden = false; fe.textContent = "Not accepted: " + failed.join("; "); status("Some settings were refused, nothing saved."); return; }
+    if (!sent) { status("Nothing changed, nothing to save."); return; }
+    const out = await ask("save", l => /^(saved|error)/.test(l), 3000);
+    status(out.some(l => l.startsWith("saved")) ? "Saved to the digipeater." : "Sent, but no confirmation of the save. Press Read again.");
+    await readSettings();
+  } finally { $("save").disabled = false; }
+}
+
+async function getId() {
+  $("getid").disabled = true; status("Restarting to read the chip ID...");
+  const lines = await ask("reboot", l => /chip ID/i.test(l), 6000);
+  const l = lines.find(x => /chip ID/i.test(x));
+  const m = l && /chip ID\s+(.+)$/i.exec(l);
+  const box = $("chipid");
+  if (m) { box.textContent = m[1].trim(); box.hidden = false; status("Chip ID read."); }
+  else if (l && /the secret you set/i.test(l)) { box.textContent = "A secret is set, so the key is that secret, not the chip ID."; box.hidden = false; }
+  else { status("Did not see the chip ID. Open the serial log and press the reset button."); }
+  $("getid").disabled = false;
+  await sleep(1500); await readSettings();
+}
+
+async function connect() {
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+  } catch (e) { port = null; status(e.name === "NotFoundError" ? "No port chosen." : "Could not open the port: " + e.message); return; }
+  writer = port.writable.getWriter();
+  $("connect").disabled = true; $("disconnect").disabled = false;
+  pump();
+  await sleep(300);
+  await readSettings();
+}
+
+function disconnected() {
+  port = null; writer = null;
+  $("connect").disabled = false; $("disconnect").disabled = true;
+  $("form").hidden = true; $("idbox").hidden = true;
+  status("Not connected.");
+}
+
+async function disconnect() {
+  const p = port; port = null;
+  try { if (reader) await reader.cancel(); } catch (e) {}
+  try { if (writer) { writer.releaseLock(); } } catch (e) {}
+  try { if (p) await p.close(); } catch (e) {}
+  disconnected();
+}
+
+$("connect").onclick = connect;
+$("disconnect").onclick = disconnect;
+$("save").onclick = save;
+$("reread").onclick = readSettings;
+$("getid").onclick = getId;
+$("here").onclick = () => {
+  if (!navigator.geolocation) { $("formerr").hidden = false; $("formerr").textContent = "This browser has no location."; return; }
+  navigator.geolocation.getCurrentPosition(
+    p => { $("lat").value = p.coords.latitude.toFixed(6); $("lon").value = p.coords.longitude.toFixed(6); $("formerr").hidden = true; },
+    e => { $("formerr").hidden = false; $("formerr").textContent = "Could not get the location: " + e.message; });
+};
+if (!("serial" in navigator)) { $("nosupport").hidden = false; $("connect").disabled = true; }
+</script>
+</body>
+</html>
