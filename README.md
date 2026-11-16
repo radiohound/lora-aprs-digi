@@ -5,7 +5,7 @@ packets (`3C FF 01` + text), with a fill-in or wide path rule, an optional **mov
 up over a serial port or, for most settings, by an APRS message over the air: callsign, SSID, mode, radio settings and
 the rest are typed in and saved in the chip itself. No reflashing to change a setting.
 
-**Download:** prebuilt firmware (`.bin` and `.hex`) is on the [Releases page](https://github.com/radiohound/lora-aprs-digi/releases/latest). Put it on over the USB cable from the [setup page](https://radiohound.github.io/lora-aprs-digi/tools/setup.html) (or with an ST-LINK); no build needed.
+**Download:** prebuilt firmware (`.bin` and `.hex`) is on the [Releases page](https://github.com/radiohound/lora-aprs-digi/releases/latest). **The first time, a new board needs an ST-LINK V2** (a small USB programmer, a few dollars) to put this firmware on it. After that, every update goes over the USB cable from the [setup page](https://radiohound.github.io/lora-aprs-digi/tools/setup.html), no ST-LINK needed. No build needed.
 
 **Set it up in the browser:** the [setup page](https://radiohound.github.io/lora-aprs-digi/tools/setup.html) (Chrome or Edge) connects over USB, shows every setting with a description, saves them, updates the firmware, and can command a second digipeater over the air. No terminal program needed.
 
@@ -99,13 +99,13 @@ runs to an SMA bulkhead on the case for an external antenna.
 
 ## Build and flash
 
-**Prebuilt:** download `lora-aprs-digi-e77.bin` (flash at `0x08000000`) or the `.hex` from the [latest release](https://github.com/radiohound/lora-aprs-digi/releases/latest), check it against `SHA256SUMS.txt`, and program it with an ST-LINK (for example STM32CubeProgrammer). To build it yourself:
+**Prebuilt:** download `lora-aprs-digi-e77.bin` (flash at `0x08000000`) or the `.hex` from the [latest release](https://github.com/radiohound/lora-aprs-digi/releases/latest), check it against `SHA256SUMS.txt`, and program it with an **ST-LINK V2** (for example with STM32CubeProgrammer). This is required the first time: a new board has nothing on it that can take a program over the USB cable. To build it yourself:
 
 ### Update over the USB cable (no ST-LINK)
 
 Once the board runs this firmware (v1.1.0 or newer), new versions go on over the same USB cable that you use for the
-settings. The first firmware on a board that does not have it yet needs an ST-LINK, once (see below). A blank chip
-starts its own bootloader by itself.
+settings. **The first firmware on a new board needs an ST-LINK V2, once** (see [Build it yourself](#build-it-yourself) for the commands). A blank chip should start its
+own bootloader by itself, but that has not been tried on a board here, so plan on the ST-LINK.
 
 **From the browser** (Chrome or Edge, on a computer):
 
