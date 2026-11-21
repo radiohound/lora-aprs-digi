@@ -20,7 +20,7 @@ static void plain_cases(void)
         { "K6ATV-3>APZLPI,WIDE2-2:>hi", "K6ATV-3>APZLPI,K6ATV-11*,WIDE2-1:>hi", D3_MODE_WIDE },
         { "K6ATV-3>APZLPI,K6ATV-11:>hi", "K6ATV-3>APZLPI,K6ATV-11*:>hi", D3_MODE_FILLIN },          /* addressed to this station */
         { "K6ATV-3>APZLPI,K6ATV-11*,WIDE2-1:>hi", NULL, D3_MODE_WIDE },                         /* already repeated here */
-        { "K6ATV-11>APZLD3,WIDE1-1:>me", NULL, D3_MODE_WIDE },                                   /* our own packet */
+        { "K6ATV-11>APLAB0,WIDE1-1:>me", NULL, D3_MODE_WIDE },                                   /* our own packet */
         { "K6ATV-3>APZLPI,WIDE7-8:>hi", NULL, D3_MODE_WIDE },                                    /* breaks WIDEn-N */
         { "K6ATV-3>APZLPI:>no path", NULL, D3_MODE_WIDE },
         { "K6ATV-3>APZLPI,WIDE3-3:>hi", NULL, D3_MODE_WIDE },                                    /* not served */

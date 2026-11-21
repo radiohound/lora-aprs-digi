@@ -277,7 +277,7 @@ sym_table = L
 sym_code = #
 comment = LoRa APRS digi, STM32WLE5
 path = -
-tocall = APZLD3
+tocall = APLAB0
 beacon_min = 60 min
 beacon_first = 30 s
 stats_min = 10 min
@@ -381,7 +381,7 @@ Defaults are the values in `src/digi3/config_digi3.h`. **Radio** settings need `
 | `sym_table`, `sym_code` | `L`, `#` | 1 char each | APRS symbol (`L#` = LoRa digipeater overlay) |
 | `comment` | `LoRa APRS digi, STM32WLE5` | up to 43 chars | beacon comment (no `|` or `~`) |
 | `path` | empty | up to 23 chars | beacon path, e.g. `WIDE1-1` |
-| `tocall` | `APZLD3` | 1–6 chars | beacon destination (experimental APZ) |
+| `tocall` | `APLAB0` | 1–6 chars | beacon destination (registered tocall) |
 | `beacon_min` | 60 | 1–1440 | beacon interval |
 | `beacon_first` | 30 s | 0–3600 | first beacon after power-up |
 | `freq` * | 433.775 MHz | 410–510 (radio) | up to 6 decimals |

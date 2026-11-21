@@ -70,8 +70,8 @@
 #define BEACON_PATH         ""              // e.g. "WIDE1-1"; a high digi usually beacons with no path
 #define BEACON_INTERVAL_MIN 60
 #define BEACON_FIRST_S      30              // the first beacon after power-up
-// Destination (tocall): experimental APZ until APLAB? is assigned for the STM32WLE5 projects.
-#define APRS_DESTINATION    "APZLD3"
+// Destination (tocall): APLAB0, the registered tocall for this digipeater.
+#define APRS_DESTINATION    "APLAB0"
 
 // ---- SETTINGS OVER THE AIR ------------------------------------
 // An APRS message to this callsign can run get, set, save, beacon or reboot (not the callsign, the radio settings or the secret).

@@ -118,7 +118,7 @@ static void test_commands(void)
     run(&s, "set always_tocalls aplaix,aplab"); CHECK(strcmp(s.always_tocalls, "APLAIX,APLAB") == 0);
     run(&s, "set sym_table /");   CHECK(s.sym_table[0] == '/');
     run(&s, "set sym_code ab");   CHECK(said("wrong length"));
-    run(&s, "set tocall apzld3"); CHECK(strcmp(s.tocall, "APZLD3") == 0);
+    run(&s, "set tocall aplab0"); CHECK(strcmp(s.tocall, "APLAB0") == 0);
     run(&s, "set tocall");        CHECK(said("error"));
 
     /* shape of the commands */
