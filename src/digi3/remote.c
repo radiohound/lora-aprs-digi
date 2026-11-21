@@ -81,6 +81,12 @@ int d3r_check(const uint8_t key[16], const char *mycall, uint32_t counter, const
 }
 
 /* ---- messages ---- */
+const char *d3r_unwrap(const char *packet)
+{
+    const char *colon = strchr(packet, ':');
+    return (colon && colon[1] == '}') ? colon + 2 : packet;
+}
+
 int d3r_message_to(const char *info, size_t ilen, const char *mycall, char *text, size_t tcap, char *msgno, size_t mcap)
 {
     size_t al, i, end, brace;

@@ -29,6 +29,11 @@ void d3r_key_from_secret(const char *secret, uint8_t key[16]);
 /* The code for a command (out gets D3R_CODE_LEN characters and a NUL). */
 void d3r_code(const uint8_t key[16], const char *mycall, uint32_t counter, const char *command, char *out);
 
+/* A third-party packet (APRS 1.0, chapter 17) holds a whole packet after a '}' at the start of its information field:
+ * "IGATE>APxxxx,PATH:}SRC>DEST,TCPIP,IGATE*::ADDRESSEE:text". An iGate that sends APRS-IS traffic on to the radio wraps it so.
+ * Returns the packet inside (from SRC), or the packet itself when it is not wrapped. Opens one level only. */
+const char *d3r_unwrap(const char *packet);
+
 /* An APRS message (the information field after the source's path) addressed to mycall?  On 1: the text and the message number
  * (empty if none) are copied out. */
 int d3r_message_to(const char *info, size_t ilen, const char *mycall, char *text, size_t tcap, char *msgno, size_t mcap);

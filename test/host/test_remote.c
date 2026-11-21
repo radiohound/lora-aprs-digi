@@ -55,6 +55,17 @@ int main(void)
     CHECK(!d3r_message_to(":K6ATV-1  :hi", 13, "K6ATV-10", text, sizeof text, msgno, sizeof msgno));
     CHECK(!d3r_message_to(":K6ATV-100:hi", 13, "K6ATV-10", text, sizeof text, msgno, sizeof msgno));
     CHECK(!d3r_message_to("!3700.00N/12100.00W-", 20, "K6ATV-10", text, sizeof text, msgno, sizeof msgno));
+    /* third-party (an iGate sending APRS-IS traffic on to the radio) */
+    { const char *w = "K6ATV-30>APLRG1,WIDE1-1:}K6ATV>APRS,TCPIP,K6ATV-30*::K6ATV-2  :1794200000 set tocall APLAB0 ABCDEFGH{12";
+      const char *in = d3r_unwrap(w), *c = strchr(in, ':');
+      CHECK(strncmp(in, "K6ATV>APRS,TCPIP,K6ATV-30*:", 27) == 0);
+      CHECK(c && d3r_message_to(c + 1, strlen(c + 1), "K6ATV-2", text, sizeof text, msgno, sizeof msgno));
+      CHECK(strcmp(text, "1794200000 set tocall APLAB0 ABCDEFGH") == 0 && strcmp(msgno, "12") == 0);
+      CHECK(!d3r_message_to(strchr(w, ':') + 1, strlen(strchr(w, ':') + 1), "K6ATV-2", text, sizeof text, msgno, sizeof msgno)); }   /* not read without unwrapping */
+    { const char *p = "K6ATV-3>APLPIK,WIDE1-1::K6ATV-2  :hi"; CHECK(d3r_unwrap(p) == p); }                /* not wrapped: the packet itself */
+    { const char *p = "K6ATV-3>APLPIK:!3700.00N/12100.00W-}"; CHECK(d3r_unwrap(p) == p); }                 /* a '}' later on is not third-party */
+    { const char *p = "no colon"; CHECK(d3r_unwrap(p) == p); }
+    { const char *w = "A>B:}C>D:}E>F::K6ATV-2  :hi"; CHECK(strcmp(d3r_unwrap(w), "C>D:}E>F::K6ATV-2  :hi") == 0); }   /* one level only */
     CHECK(d3r_split("1794200000 set comment hello there ABCDEFGH", &ctr, cmd, sizeof cmd, code, sizeof code));
     CHECK(ctr == 1794200000u && !strcmp(cmd, "set comment hello there") && !strcmp(code, "ABCDEFGH"));
     CHECK(!d3r_split("set moving on ABCDEFGH", &ctr, cmd, sizeof cmd, code, sizeof code));      /* no counter */

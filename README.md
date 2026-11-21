@@ -336,6 +336,15 @@ Send the printed line as an APRS message to K6ATV-10 (APRSdroid, a tracker, the 
 (if the message has a number; the setup page sends none, so you get just the answer) and answers with a message: `moving = on (not saved)`. A change works at once but is
 only kept after a `save`, so a mistake is undone by a restart.
 
+**From anywhere: APRS-IS and an iGate near the digi.** If an iGate that hears the digi sends APRS-IS messages on to
+the radio, a command can be sent from home: send the line as an APRS message to the digi on APRS-IS (aprs.fi, an
+APRS-IS client...). The iGate sends it on as a third-party packet (`IGATE>...:}YOU>...,TCPIP,IGATE*::K6ATV-10 :...`);
+the digi reads the message inside (firmware v1.2.4 or newer; older firmware ignores it) and answers YOU over the
+radio, and the iGate gates the answer back to APRS-IS. Two things on the iGate side: messages to RF must be on, and an
+iGate only sends a message on to a station it heard recently (the LoRa APRS iGate: within *remember station time*,
+30 minutes by default). The digi beacons every `beacon_min` (60 minutes by default), so send the command soon after a
+beacon, or raise that time on the iGate above `beacon_min`.
+
 * **What can be sent:** `get`, `set`, `save`, `beacon`, `reboot`. **Not** over the air: the callsign and SSID, the radio
   settings (`freq`, `bw`, `sf`, `cr`, `power`, `sync`, `preamble`, `boosted`: one wrong value and it could not hear you
   any more), the secret, `defaults` and `apply`.
@@ -448,7 +457,7 @@ can read.
 
 **On a PC** (`test/host`): 52 checks on the digipeater core (the path rule, duplicate keys, positions against aprslib, the
 moving rules, the station list), 461 on the settings (every command, every range, a `show` → `set` round trip for every
-setting, the flash record, and every single-bit error and truncation of a record caught), 40 on settings over the air (with
+setting, the flash record, and every single-bit error and truncation of a record caught), 48 on settings over the air (with
 python3, also that `tools/remote_code.py` gives the same codes), 32 on the battery states, and 7 on
 `tools/remote_code.html`, plus one check that the copy of the signing code in `tools/setup.html` is identical:
 

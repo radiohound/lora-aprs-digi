@@ -658,9 +658,11 @@ static void sendReply(const char *from, const char *msgno, const char *reply)
     queueMessage(from, reply, 2000);
 }
 
-// True when the packet was a message to this digi (then it is not repeated).
+// True when the packet was a message to this digi (then it is not repeated). A message from APRS-IS that an iGate sends on to the radio
+// arrives wrapped as third-party ("IGATE>...:}SENDER>...::MYCALL   :..."): it is read from the inside, and the answer goes to SENDER.
 static bool handleRemote(const char *text, uint32_t now)
 {
+    text = d3r_unwrap(text);
     const char *gt = strchr(text, '>'), *colon = strchr(text, ':');
     if (!gt || !colon || gt > colon || gt - text > 9) return false;
     char from[10], body[100], msgno[8], command[80], code[12];
